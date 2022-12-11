@@ -33,14 +33,15 @@ pub const BUFFER_LABEL: &'static str = " Buffer";
 pub struct RenderState {
     pub device: Device,
     pub queue: Queue,
-    pub main_surface: Surface,
-    pub main_surface_config: SurfaceConfiguration,
+    pub surface: Surface,
+    pub surface_config: SurfaceConfiguration,
     pub cube_pipeline: RenderPipeline,
 
     pub camera: Camera,
     pub camera_bind: CameraBind,
     pub bind_groups: Vec<BindGroup>,
     pub clear_color: Color,
+    pub depth_texture_bind : TextureBind,
 }
 
 impl RenderState {
@@ -79,7 +80,7 @@ impl RenderState {
         let clear_color = Color::GREEN;
 
         // surface 配置, 窗口 resize 用
-        let con = {
+        let surface_config = {
             let size = window.inner_size();
             let con =
                 Self::get_default_main_surface_config(size.width, size.height, &surface, &adapter);
@@ -110,10 +111,7 @@ impl RenderState {
         group_bd.push_entries(entries);
 
         // bind group 结束
-        let (lay, bg) = {
-            group_bd.complete();
-            group_bd.drain()
-        };
+        let (lay, bg) = group_bd.build();
         bind_group_layouts.push(lay);
         bind_groups.push(bg);
 
@@ -127,7 +125,7 @@ impl RenderState {
             device.create_pipeline_layout(&desc)
         };
 
-        let pipeline = {
+        let cube_pipeline = {
             let mut builder = PipelineBuilder::new();
             let vertex_buffer = [Vertex::desc()];
             builder
@@ -142,11 +140,35 @@ impl RenderState {
             builder.build()?
         };
 
-        todo!()
+        // 深度图
+        let depth_texture_bind = {
+            let mut builder = TextureDescBuilder::default();
+            builder
+                .set_device(&device)
+                .set_label("Depth")
+                .set_format(TextureFormat::Depth32Float)
+                .set_width(surface_config.width)
+                .set_height(surface_config.height);
+            builder.build()
+        };
+
+        Ok(Self {
+            device,
+            queue,
+            surface,
+            surface_config,
+            cube_pipeline,
+            camera,
+            camera_bind,
+            bind_groups,
+            clear_color,
+            depth_texture_bind,
+        })
+        // Err(anyhow::format_err!("todo"))
     }
 
     pub fn redraw(&mut self) -> anyhow::Result<()> {
-        let texture = self.main_surface.get_current_texture()?;
+        let texture = self.surface.get_current_texture()?;
         let mut encoder = {
             let desc = CommandEncoderDescriptor {
                 label: Some("主要 Command Encoder"),
@@ -164,18 +186,18 @@ impl RenderState {
                         store: true,
                     },
                 };
-                // let depth_stencil_att = RenderPassDepthStencilAttachment {
-                //     view: todo!(),
-                //     depth_ops: Some(Operations {
-                //         load: LoadOp::Clear(1.0),
-                //         store: true,
-                //     }),
-                //     stencil_ops: None,
-                // };
+                let depth_stencil_att = RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture_bind.view,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                };
                 let desc = RenderPassDescriptor {
                     label: Some("主 Render Pass"),
                     color_attachments: &[Some(color_att)],
-                    depth_stencil_attachment: None,
+                    depth_stencil_attachment: Some(depth_stencil_att),
                 };
                 encoder.begin_render_pass(&desc)
             };
@@ -189,10 +211,10 @@ impl RenderState {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.main_surface_config.width = width;
-        self.main_surface_config.height = height;
-        self.main_surface
-            .configure(&self.device, &self.main_surface_config);
+        self.surface_config.width = width;
+        self.surface_config.height = height;
+        self.surface
+            .configure(&self.device, &self.surface_config);
     }
 }
 
@@ -294,7 +316,7 @@ impl<'d> PipelineBuilder<'d> {
             f.read_to_string(&mut s);
             let desc = ShaderModuleDescriptor {
                 label: Some(fs_path),
-                source: ShaderSource::Wgsl(fs_path.into()),
+                source: ShaderSource::Wgsl(s.into()),
             };
             device.create_shader_module(desc)
         };
@@ -455,14 +477,9 @@ pub use vertex_buffer_layout;
 
 #[derive(Debug, Default)]
 pub struct BindGroupBuider<'a> {
-    complete: bool,
-
     device: Option<&'a Device>,
     label: Option<&'a str>,
     entries: Vec<BindGroupBuilderEntryDesc<'a>>,
-
-    layout: Option<BindGroupLayout>,
-    bind_group: Option<wgpu::BindGroup>,
 }
 
 #[derive(Debug)]
@@ -499,16 +516,7 @@ impl<'a> BindGroupBuider<'a> {
         name.push_str(BIND_GROUP_LAYOUT_LABEL);
         Some(name)
     }
-    pub fn complete(&mut self) {
-        if self.complete {
-            panic!("只能 complete 一次")
-        }
-        self.complete = true; 
-        
-        if self.layout.is_some() || self.bind_group.is_some() {
-            unreachable!()
-        }
-
+    pub fn build(mut self) -> (BindGroupLayout, BindGroup) {
         let device = self.device.unwrap();
         let entries = replace(&mut self.entries, Vec::new());
         let (layout_entries, entries): (Vec<_>, Vec<_>) = entries
@@ -545,15 +553,6 @@ impl<'a> BindGroupBuider<'a> {
             };
             device.create_bind_group(&desc)
         };
-
-        self.layout = Some(layout);
-        self.bind_group = Some(bind_group);
-    }
-
-    pub fn drain(self) -> (BindGroupLayout, BindGroup) {
-        if !self.complete {
-            panic!("需要先 complete")
-        };
-        (self.layout.unwrap(), self.bind_group.unwrap())
+        (layout, bind_group)
     }
 }

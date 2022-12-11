@@ -23,6 +23,7 @@ use crate::{utils::builder_set_fn, window::Input};
 
 use super::*;
 
+#[derive(Debug)]
 pub struct Image {
     data: Vec<u8>,
     width: u32,
@@ -47,6 +48,7 @@ impl Image {
     }
 }
 
+#[derive(Debug)]
 pub struct TextureBind {
     pub texture: wgpu::Texture,
     pub view: TextureView,
@@ -90,6 +92,7 @@ impl TextureBind {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct TextureDescBuilder<'a> {
     device: Option<&'a Device>,
     label: Option<&'a str>,
@@ -132,7 +135,7 @@ impl<'a> TextureDescBuilder<'a> {
         let size = Extent3d {
             width: self.width.unwrap(),
             height: self.height.unwrap(),
-            depth_or_array_layers: self.z.unwrap(),
+            depth_or_array_layers: self.z.unwrap_or(1),
         };
 
         let texture = {

@@ -18,5 +18,7 @@ uint = "*"
 pollster = "*"
 memoffset = "*"
 once_cell = "*"
+env_logger = "*"
+log = "*"
 
 cubescript2_macros = { path = "crates/macros" }

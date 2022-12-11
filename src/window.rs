@@ -10,7 +10,7 @@ use winit::{
     window::WindowBuilder,
 };
 
-use crate::render::{redraw, RenderState};
+use crate::render::{RenderState};
 
 pub async fn run() -> Result<()> {
     let event_loop = event_loop::EventLoop::new();
@@ -25,6 +25,7 @@ pub async fn run() -> Result<()> {
                 window.request_redraw();
             }
             Event::RedrawRequested(wid) => {
+                // render.redraw();
             }
             Event::RedrawEventsCleared => {
             }
