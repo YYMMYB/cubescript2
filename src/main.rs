@@ -1,3 +1,4 @@
+use cubescript2::{render::*, window::run};
 fn main() {
-    println!("Hello, world!");
+    pollster::block_on(run());
 }
