@@ -13,7 +13,7 @@ image = "*"
 
 anyhow = "*"
 bitmaps = "*"
-bytemuck = "*"
+bytemuck = { version = "*", features = ["derive"] }
 uint = "*"
 pollster = "*"
 memoffset = "*"

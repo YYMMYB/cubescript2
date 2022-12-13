@@ -5,12 +5,12 @@ use bitmaps::Bitmap;
 use nalgebra::Vector2;
 use winit::{
     dpi::PhysicalPosition,
-    event::{DeviceEvent, Event, KeyboardInput, ScanCode, VirtualKeyCode},
+    event::{DeviceEvent, Event, KeyboardInput, ScanCode, VirtualKeyCode, WindowEvent},
     event_loop::{self, ControlFlow, EventLoopWindowTarget},
     window::WindowBuilder,
 };
 
-use crate::render::{RenderState};
+use crate::render::RenderState;
 
 pub async fn run() -> Result<()> {
     let event_loop = event_loop::EventLoop::new();
@@ -21,15 +21,20 @@ pub async fn run() -> Result<()> {
     event_loop.run(move |event, target, mut control| {
         input.handle_event(&event, target, control);
         match event {
+            Event::WindowEvent { event, window_id } => match event {
+                WindowEvent::Resized(size) => {
+                    render.resize(size.width, size.height);
+                }
+                _ => {}
+            },
             Event::MainEventsCleared => {
                 window.request_redraw();
             }
             Event::RedrawRequested(wid) => {
-                // render.redraw();
+                render.redraw();
             }
-            Event::RedrawEventsCleared => {
-            }
-            _ => {},
+            Event::RedrawEventsCleared => {}
+            _ => {}
         }
     })
 }
