@@ -163,8 +163,6 @@ impl RenderState {
         // 深度图
         let depth_texture_bind = create_depth_texture_bind(&device, &surface_config)?;
 
-        println!("{:?}", mesh_manager);
-
         let mut ret = Self {
             device,
             queue,
@@ -178,7 +176,7 @@ impl RenderState {
             depth_texture_bind,
             mesh_manager,
         };
-        // ret.resize(ret.surface_config.width, ret.surface_config.height);
+        ret.resize(ret.surface_config.width, ret.surface_config.height)?;
         Ok(ret)
     }
 
@@ -276,19 +274,6 @@ impl RenderState {
         };
         con
     }
-}
-
-pub fn get_bind(
-    device: &Device,
-    label: Option<&str>,
-    contents: &[u8],
-    usage: BufferUsages,
-) -> Buffer {
-    device.create_buffer_init(&BufferInitDescriptor {
-        label,
-        contents,
-        usage,
-    })
 }
 
 const EMPTY_KEY: &'static str = "Key 不存在于字典中";

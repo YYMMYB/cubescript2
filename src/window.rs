@@ -1,12 +1,13 @@
-use std::default;
+use std::{default, ops::ControlFlow};
 
 use anyhow::Result;
 use bitmaps::Bitmap;
+use log::info;
 use nalgebra::Vector2;
 use winit::{
-    dpi::PhysicalPosition,
+    dpi::{PhysicalPosition, PhysicalSize},
     event::{DeviceEvent, Event, KeyboardInput, ScanCode, VirtualKeyCode, WindowEvent},
-    event_loop::{self, ControlFlow, EventLoopWindowTarget},
+    event_loop::{self, EventLoopWindowTarget},
     window::WindowBuilder,
 };
 
@@ -15,28 +16,37 @@ use crate::render::RenderState;
 pub async fn run() -> Result<()> {
     let event_loop = event_loop::EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop)?;
-
+    let mut first_frame = true;
     let mut input = Input::default();
     let mut render = RenderState::init(&window).await?;
     event_loop.run(move |event, target, mut control| {
         input.handle_event(&event, target, control);
-        match event {
-            Event::WindowEvent { event, window_id } => match event {
-                WindowEvent::Resized(size) => {
-                    if size.width > 0 && size.height > 0 {
-                        render.resize(size.width, size.height);
-                    }
+        if first_frame {
+            match event {
+                Event::RedrawEventsCleared => {
+                    first_frame = false;
                 }
                 _ => {}
-            },
-            Event::MainEventsCleared => {
-                window.request_redraw();
             }
-            Event::RedrawRequested(wid) => {
-                render.redraw();
+        } else {
+            match event {
+                Event::WindowEvent { event, window_id } => match event {
+                    WindowEvent::Resized(size) => {
+                        if size.width > 0 && size.height > 0 {
+                            render.resize(size.width, size.height);
+                        }
+                    }
+                    _ => {}
+                },
+                Event::MainEventsCleared => {
+                    window.request_redraw();
+                }
+                Event::RedrawRequested(wid) => {
+                    render.redraw();
+                }
+                Event::RedrawEventsCleared => {}
+                _ => {}
             }
-            Event::RedrawEventsCleared => {}
-            _ => {}
         }
     })
 }
@@ -61,7 +71,7 @@ impl Input {
         &mut self,
         event: &Event<()>,
         target: &EventLoopWindowTarget<()>,
-        control: &mut ControlFlow,
+        control: &mut event_loop::ControlFlow,
     ) {
         match event {
             // Event::Suspended => todo!(),
