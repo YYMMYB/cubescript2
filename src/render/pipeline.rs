@@ -8,7 +8,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::Result;
+use anyhow::*;
 use cubescript2_macros::derive_desc;
 use image::DynamicImage;
 use memoffset::offset_of;
@@ -77,14 +77,14 @@ impl<'d> PipelineBuilder<'d> {
     pub fn build(mut self) -> Result<RenderPipeline> {
         self.add_default_values();
 
-        let device = replace(&mut self.device, None).unwrap();
-        let layout = replace(&mut self.layout, None).unwrap();
-        let vs_path = replace(&mut self.vs_path, None).unwrap();
-        let fs_path = replace(&mut self.fs_path, None).unwrap();
-        let label = self.label;
-        let vertex_buffer = replace(&mut self.vertex_buffer, None).unwrap();
-        let depth_format = replace(&mut self.depth_format, None).unwrap();
-        let depth_write = replace(&mut self.depth_write, None).unwrap();
+        let device = self.device.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let layout = self.layout.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let vs_path = self.vs_path.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let fs_path = self.fs_path.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let label = get_default_label(&self.label, [PIPELINE_LABEL]);
+        let vertex_buffer = self.vertex_buffer.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let depth_format = self.depth_format.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let depth_write = self.depth_write.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
 
         let vs = {
             let mut f = File::open(vs_path)?;
@@ -108,13 +108,13 @@ impl<'d> PipelineBuilder<'d> {
         };
         // 这里可以放多个吗?
         let targets = [Some(wgpu::ColorTargetState {
-            format: self.target_format.unwrap(),
-            blend: Some(self.target_blend.unwrap()),
+            format: self.target_format.ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
+            blend: Some(self.target_blend.ok_or(anyhow!(BUILDER_FIELD_UNSET))?),
             write_mask: wgpu::ColorWrites::ALL,
         })];
         let pipline = {
             let desc = RenderPipelineDescriptor {
-                label: label,
+                label: label.as_deref(),
                 layout: Some(layout),
                 vertex: VertexState {
                     module: &vs,
@@ -136,8 +136,8 @@ impl<'d> PipelineBuilder<'d> {
                     conservative: false,
                 },
                 depth_stencil: Some(DepthStencilState {
-                    format: depth_format,
-                    depth_write_enabled: depth_write,
+                    format: depth_format.clone(),
+                    depth_write_enabled: depth_write.clone(),
                     depth_compare: wgpu::CompareFunction::Less,
                     stencil: StencilState::default(),
                     bias: DepthBiasState::default(),
@@ -186,18 +186,8 @@ impl<'a> BindGroupBuider<'a> {
         }
     }
 
-    fn get_label_or_default(&self) -> Option<&str> {
-        self.label.or_else(|| Some("Unnamed Bind Group"))
-    }
-
-    fn get_bind_group_layout_label(&mut self) -> Option<String> {
-        let name = self.get_label_or_default()?;
-        let mut name = name.to_string();
-        name.push_str(BIND_GROUP_LAYOUT_LABEL);
-        Some(name)
-    }
-    pub fn build(mut self) -> (BindGroupLayout, BindGroup) {
-        let device = self.device.unwrap();
+    pub fn build(mut self) -> Result<(BindGroupLayout, BindGroup)> {
+        let device = self.device.ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
         let entries = replace(&mut self.entries, Vec::new());
         let (layout_entries, entries): (Vec<_>, Vec<_>) = entries
             .into_iter()
@@ -217,7 +207,7 @@ impl<'a> BindGroupBuider<'a> {
             })
             .unzip();
         let layout = {
-            let label = self.get_bind_group_layout_label();
+            let label = get_default_label(&self.label, [BIND_GROUP_LAYOUT_LABEL]);
             let desc = BindGroupLayoutDescriptor {
                 label: label.as_deref(),
                 entries: &layout_entries,
@@ -225,14 +215,16 @@ impl<'a> BindGroupBuider<'a> {
             device.create_bind_group_layout(&desc)
         };
         let bind_group = {
-            let label = self.get_label_or_default();
+            let label = get_default_label(&self.label, [BIND_GROUP_LABEL]);
             let desc = BindGroupDescriptor {
-                label: label,
+                label: label.as_deref(),
                 layout: &layout,
                 entries: &entries,
             };
             device.create_bind_group(&desc)
         };
-        (layout, bind_group)
+        Ok((layout, bind_group))
     }
 }
+
+const BUILDER_FIELD_UNSET: &'static str = "builder 必须字段未被设置";

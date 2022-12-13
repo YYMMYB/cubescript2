@@ -14,7 +14,7 @@ use crate::render::RenderState;
 
 pub async fn run() -> Result<()> {
     let event_loop = event_loop::EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window = WindowBuilder::new().build(&event_loop)?;
 
     let mut input = Input::default();
     let mut render = RenderState::init(&window).await?;
@@ -23,7 +23,9 @@ pub async fn run() -> Result<()> {
         match event {
             Event::WindowEvent { event, window_id } => match event {
                 WindowEvent::Resized(size) => {
-                    render.resize(size.width, size.height);
+                    if size.width > 0 && size.height > 0 {
+                        render.resize(size.width, size.height);
+                    }
                 }
                 _ => {}
             },

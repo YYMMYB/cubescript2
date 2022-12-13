@@ -8,7 +8,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::Result;
+use anyhow::*;
 use cubescript2_macros::derive_desc;
 use image::DynamicImage;
 use memoffset::offset_of;
@@ -27,14 +27,14 @@ pub mod camera;
 pub mod mesh;
 pub mod pipeline;
 pub mod texture;
+pub mod label;
 use built_in::*;
 use camera::*;
 use mesh::*;
 use pipeline::*;
 use texture::*;
+use label::*;
 
-pub const BIND_GROUP_LAYOUT_LABEL: &'static str = " BindGroupLayout";
-pub const BUFFER_LABEL: &'static str = " Buffer";
 
 #[derive(Debug)]
 pub struct RenderState {
@@ -98,7 +98,7 @@ impl RenderState {
         };
 
         // Mesh Manager
-        let mesh_manager = MeshManager::init(&device);
+        let mesh_manager = MeshManager::init(&device)?;
 
         // 存所有的 bind group, bind group layout
         let mut bind_group_layouts = Vec::new();
@@ -114,17 +114,17 @@ impl RenderState {
         camera.calculate();
 
         // 相机 bind, 并增加到 bind group.
-        let mut builder = CameraDescBuilder::default();
+        let mut builder = CameraBindBuilder::default();
         builder
             .set_device(&device)
             .set_camera(&camera)
             .set_label("Main");
-        let camera_bind = builder.build();
+        let camera_bind = builder.build()?;
         let camera_entries = camera_bind.get_entries_desc();
 
         // bind group 结束
         group_bd.push_entries(camera_entries);
-        let (lay, bg) = group_bd.build();
+        let (lay, bg) = group_bd.build()?;
         bind_group_layouts.push(lay);
         bind_groups.push(bg);
 
@@ -142,7 +142,10 @@ impl RenderState {
             let mut builder = PipelineBuilder::new();
             let attr_lay = {
                 let id = &mesh_manager.cube_mesh.attr_lay_id;
-                mesh_manager.attr_lay_set.get(id).unwrap()
+                mesh_manager
+                    .attr_lay_set
+                    .get(id)
+                    .ok_or(anyhow!(EMPTY_KEY))?
             };
             let vertex_buffer = [cube::CubeVertx::desc(attr_lay)];
             builder
@@ -158,9 +161,7 @@ impl RenderState {
         };
 
         // 深度图
-        let depth_texture_bind = {
-            create_depth_texture_bind(&device, &surface_config)
-        };
+        let depth_texture_bind = create_depth_texture_bind(&device, &surface_config)?;
 
         println!("{:?}", mesh_manager);
 
@@ -184,7 +185,7 @@ impl RenderState {
     pub fn redraw(&mut self) -> anyhow::Result<()> {
         self.camera.calculate();
         self.camera_bind.write(&mut self.queue, &self.camera);
-        
+
         let texture = self.surface.get_current_texture()?;
         let mut encoder = {
             let desc = CommandEncoderDescriptor {
@@ -218,12 +219,13 @@ impl RenderState {
                 };
                 encoder.begin_render_pass(&desc)
             };
-            let cube = &self.mesh_manager.cube_mesh_bind;
-            let index_len = self.mesh_manager.cube_mesh.indices.len() as u32;
+            let cube_bind = &self.mesh_manager.cube_mesh_bind;
+            let cube_mesh = &self.mesh_manager.cube_mesh;
+            let index_len = cube_mesh.indices.len() as u32;
             render_pass.set_pipeline(&self.cube_pipeline);
             render_pass.set_bind_group(0, &self.bind_groups[0], &[]);
-            render_pass.set_vertex_buffer(0, cube.vertex_bind.slice(..));
-            render_pass.set_index_buffer(cube.index_bind.slice(..), cube.index_format);
+            render_pass.set_vertex_buffer(0, cube_bind.vertex_bind.slice(..));
+            render_pass.set_index_buffer(cube_bind.index_bind.slice(..), cube_mesh.index_format);
             render_pass.draw_indexed(0..index_len, 0, 0..1);
         }
         let command_buffer = encoder.finish();
@@ -232,16 +234,20 @@ impl RenderState {
         Ok(())
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
-        self.camera.aspect = width as f32/height as f32;
-        self.depth_texture_bind = create_depth_texture_bind(&self.device, &self.surface_config);
+        self.camera.aspect = width as f32 / height as f32;
+        self.depth_texture_bind = create_depth_texture_bind(&self.device, &self.surface_config)?;
+        Ok(())
     }
 }
 
-fn create_depth_texture_bind(device: &Device, surface_config: &SurfaceConfiguration) -> TextureBind {
+fn create_depth_texture_bind(
+    device: &Device,
+    surface_config: &SurfaceConfiguration,
+) -> Result<TextureBind> {
     let mut builder = TextureDescBuilder::default();
     builder
         .set_device(device)
@@ -284,3 +290,5 @@ pub fn get_bind(
         usage,
     })
 }
+
+const EMPTY_KEY: &'static str = "Key 不存在于字典中";
