@@ -24,17 +24,16 @@ use crate::{utils::builder_set_fn, window::Input};
 
 pub mod built_in;
 pub mod camera;
+pub mod label;
 pub mod mesh;
 pub mod pipeline;
 pub mod texture;
-pub mod label;
 use built_in::*;
 use camera::*;
+use label::*;
 use mesh::*;
 use pipeline::*;
 use texture::*;
-use label::*;
-
 
 #[derive(Debug)]
 pub struct RenderState {
@@ -140,14 +139,23 @@ impl RenderState {
 
         let cube_pipeline = {
             let mut builder = PipelineBuilder::new();
-            let attr_lay = {
-                let id = &mesh_manager.cube_mesh.attr_lay_id;
-                mesh_manager
+            let (v_lay, i_lay) = {
+                let vid = &mesh_manager.cube_mesh.vertex_layout_id;
+                let iid = &mesh_manager.cube_mesh.instance_layout_id;
+                let v = mesh_manager
                     .attr_lay_set
-                    .get(id)
-                    .ok_or(anyhow!(EMPTY_KEY))?
+                    .get(vid)
+                    .ok_or(anyhow!(EMPTY_KEY))?;
+                let i = mesh_manager
+                    .attr_lay_set
+                    .get(iid)
+                    .ok_or(anyhow!(EMPTY_KEY))?;
+                (v, i)
             };
-            let vertex_buffer = [cube::CubeVertx::desc(attr_lay)];
+            let vertex_buffer = [
+                cube::CubeVertx::desc(v_lay),
+                cube::CubeInstance::desc(i_lay),
+            ];
             builder
                 .set_device(&device)
                 .set_label("Cube Pipline")
@@ -220,11 +228,16 @@ impl RenderState {
             let cube_bind = &self.mesh_manager.cube_mesh_bind;
             let cube_mesh = &self.mesh_manager.cube_mesh;
             let index_len = cube_mesh.indices.len() as u32;
+            let mut instance_len = cube_mesh.instance.len() as u32;
+            if instance_len < 1 {
+                instance_len = 1;
+            }
             render_pass.set_pipeline(&self.cube_pipeline);
             render_pass.set_bind_group(0, &self.bind_groups[0], &[]);
             render_pass.set_vertex_buffer(0, cube_bind.vertex_bind.slice(..));
+            render_pass.set_vertex_buffer(1, cube_bind.instance_bind.slice(..));
             render_pass.set_index_buffer(cube_bind.index_bind.slice(..), cube_mesh.index_format);
-            render_pass.draw_indexed(0..index_len, 0, 0..1);
+            render_pass.draw_indexed(0..index_len, 0, 0..instance_len);
         }
         let command_buffer = encoder.finish();
         self.queue.submit(once(command_buffer));

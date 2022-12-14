@@ -28,35 +28,45 @@ use crate::{utils::*, window::Input};
 
 use super::*;
 
-pub trait Vertex {}
+pub trait VSVertex {}
+pub trait VSInstance {}
 
 type VertexAttributeLayoutOwnerId = u64;
 
 #[derive(Debug)]
 pub struct MeshManager {
     pub attr_lay_set: HashMap<VertexAttributeLayoutOwnerId, VertexAttributeLayoutOwner>,
-    pub cube_mesh: Mesh<cube::CubeVertx>,
+    pub cube_mesh: Mesh<cube::CubeVertx, cube::CubeInstance>,
     pub cube_mesh_bind: MeshBind,
 }
 
 impl MeshManager {
     pub fn init(device: &Device) -> Result<MeshManager> {
-        let mut attr_lay_set = HashMap::<_, _, RandomState>::default();
-        let attr_lay = cube::CubeVertx::attr_desc();
-        let h = {
-            let mut hasher = attr_lay_set.hasher().build_hasher();
-            attr_lay.hash(&mut hasher);
+        let mut layout_set = HashMap::<_, _, RandomState>::default();
+        let v_lay = cube::CubeVertx::attr_desc();
+        let hv = {
+            let mut hasher = layout_set.hasher().build_hasher();
+            v_lay.hash(&mut hasher);
             hasher.finish()
         };
-        attr_lay_set.insert(h, attr_lay);
+        layout_set.insert(hv, v_lay);
+        let i_lay = cube::CubeInstance::attr_desc();
+        let hi = {
+            let mut hasher = layout_set.hasher().build_hasher();
+            i_lay.hash(&mut hasher);
+            hasher.finish()
+        };
+        layout_set.insert(hi, i_lay);
 
-        let cube_mesh = Mesh::<cube::CubeVertx> {
+        let cube_mesh = Mesh::<cube::CubeVertx, cube::CubeInstance> {
             vert: cube::TEST_VERTICES.into(),
             indices: cube::TEST_INDICES.into(),
-            attr_lay_id: h,
+            instance: cube::TEST_INSTANCES.into(),
+            vertex_layout_id: hv,
+            instance_layout_id: hi,
             index_format: IndexFormat::Uint16,
         };
-        let mut builder = MeshBindBuilder::<cube::CubeVertx>::default();
+        let mut builder = MeshBindBuilder::<cube::CubeVertx, cube::CubeInstance>::default();
         builder
             .set_device(device)
             .set_label("Cube")
@@ -64,7 +74,7 @@ impl MeshManager {
         let cube_mesh_bind = builder.build()?;
 
         Ok(MeshManager {
-            attr_lay_set,
+            attr_lay_set: layout_set,
             cube_mesh,
             cube_mesh_bind,
         })
@@ -77,10 +87,12 @@ pub struct VertexAttributeLayoutOwner {
 }
 
 #[derive(Debug)]
-pub struct Mesh<V> {
+pub struct Mesh<V, I> {
     pub vert: Vec<V>,
     pub indices: Vec<u16>,
-    pub attr_lay_id: VertexAttributeLayoutOwnerId,
+    pub instance: Vec<I>,
+    pub vertex_layout_id: VertexAttributeLayoutOwnerId,
+    pub instance_layout_id: VertexAttributeLayoutOwnerId,
     pub index_format: IndexFormat,
 }
 
@@ -88,23 +100,25 @@ pub struct Mesh<V> {
 pub struct MeshBind {
     pub vertex_bind: Buffer,
     pub index_bind: Buffer,
+    pub instance_bind: Buffer,
 }
 impl MeshBind {}
 
 #[derive(Default)]
-pub struct MeshBindBuilder<'a, V> {
+pub struct MeshBindBuilder<'a, V, I> {
     device: Option<&'a Device>,
     label: Option<&'a str>,
-    mesh: Option<&'a Mesh<V>>,
+    mesh: Option<&'a Mesh<V, I>>,
 }
 
-impl<'a, V> MeshBindBuilder<'a, V>
+impl<'a, V, I> MeshBindBuilder<'a, V, I>
 where
     V: bytemuck::Pod,
+    I: bytemuck::Pod,
 {
     builder_set_fn!(set_device, device, &'a Device);
     builder_set_fn!(set_label, label, &'a str);
-    builder_set_fn!(set_mesh, mesh, &'a Mesh<V>);
+    builder_set_fn!(set_mesh, mesh, &'a Mesh<V, I>);
 
     pub fn build(mut self) -> Result<MeshBind> {
         let device = self.device.ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
@@ -113,6 +127,7 @@ where
 
         let vert_label = get_default_label(label, [VERT_ATTR_LABEL]);
         let index_label = get_default_label(label, [INDEX_LABEL]);
+        let instance_label = get_default_label(label, [INSTANCE_LABEL]);
         let vertex_bind = device.create_buffer_init(&BufferInitDescriptor {
             label: vert_label.as_deref(),
             contents: bytemuck::cast_slice(&mesh.vert[..]),
@@ -123,9 +138,15 @@ where
             contents: bytemuck::cast_slice(&mesh.indices[..]),
             usage: BufferUsages::INDEX,
         });
+        let instance_bind = device.create_buffer_init(&BufferInitDescriptor {
+            label: instance_label.as_deref(),
+            contents: bytemuck::cast_slice(&mesh.instance[..]),
+            usage: BufferUsages::VERTEX,
+        });
         Ok(MeshBind {
             vertex_bind: vertex_bind,
             index_bind: index_bind,
+            instance_bind: instance_bind,
         })
     }
 }

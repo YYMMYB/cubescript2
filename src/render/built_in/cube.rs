@@ -27,33 +27,46 @@ use super::super::*;
 pub const TEST_VERTICES: &[CubeVertx] = &[
     CubeVertx {
         position: [0.0, 0.0, 0.0],
-        color: [0.2, 0.3, 0.5],
         tex_coords: [0.0, 0.0],
     },
     CubeVertx {
         position: [1.0, 0.0, 0.0],
-        color: [0.2, 0.3, 0.5],
         tex_coords: [1.0, 0.0],
     },
     CubeVertx {
         position: [1.0, 1.0, 0.0],
-        color: [0.2, 0.3, 0.5],
         tex_coords: [1.0, 0.0],
     },
     CubeVertx {
         position: [0.0, 1.0, 0.0],
-        color: [0.2, 0.3, 0.5],
         tex_coords: [0.0, 0.0],
     },
 ];
 
-pub const TEST_INDICES: &[u16] = &[ 2, 3, 0, 0, 1, 2,];
+pub const TEST_INDICES: &[u16] = &[2, 3, 0, 0, 1, 2];
+
+pub const TEST_INSTANCES: &[CubeInstance] = &[
+    CubeInstance {
+        info: [2,0,0,0],
+        position: [0.0,1.0,-3.0],
+        color: [1.0,0.1,0.1],
+    },
+    CubeInstance {
+        info: [1,0,0,0],
+        position: [0.0,0.0,-2.0],
+        color: [0.1,1.0,0.1],
+    },
+    CubeInstance {
+        info: [0,0,0,0],
+        position: [0.0,-1.0,-1.0],
+        color: [0.1,0.1,1.0],
+    },
+];
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct CubeVertx {
     position: [f32; 3],
-    color: [f32; 3],
     tex_coords: [f32; 2],
 }
 
@@ -62,8 +75,7 @@ impl CubeVertx {
         let attributes = vertex_attribute_layout!(
             Self, struct, {
                 0;position ; Float32x3,
-                1;color ; Float32x3,
-                2;tex_coords ; Float32x2,
+                1;tex_coords ; Float32x2,
             }
         );
         VertexAttributeLayoutOwner {
@@ -74,4 +86,30 @@ impl CubeVertx {
         vertex_buffer_layout!(CubeVertx, Vertex, &attr_lay.attributes[..])
     }
 }
-impl Vertex for CubeVertx {}
+impl VSVertex for CubeVertx {}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Default)]
+pub struct CubeInstance {
+    info: [u8; 4], // [exp, texure_index, rotation_id(0..24), 0]
+    position: [f32; 3],
+    color: [f32; 3],
+}
+
+impl CubeInstance {
+    pub fn attr_desc() -> VertexAttributeLayoutOwner {
+        let a: VertexFormat = VertexFormat::Uint8x4;
+        let attributes = vertex_attribute_layout!(Self, struct, {
+            2;info ; Uint8x4,
+            3;position ; Float32x3,
+            4;color ; Float32x3,
+        });
+        VertexAttributeLayoutOwner {
+            attributes: attributes.into(),
+        }
+    }
+    pub fn desc(attr_lay: &VertexAttributeLayoutOwner) -> VertexBufferLayout<'_> {
+        vertex_buffer_layout!(CubeInstance, Instance, &attr_lay.attributes[..])
+    }
+}
+impl VSInstance for CubeInstance {}

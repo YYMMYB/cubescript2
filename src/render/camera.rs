@@ -121,14 +121,9 @@ impl CameraBind {
 
 #[derive(Default, Debug)]
 pub struct CameraBindBuilder<'a> {
-    complete: bool,
-
     camera: Option<&'a Camera>,
     device: Option<&'a Device>,
     label: Option<&'a str>,
-
-    view_buffer: Option<Buffer>,
-    proj_buffer: Option<Buffer>,
 }
 
 impl<'d> CameraBindBuilder<'d> {
