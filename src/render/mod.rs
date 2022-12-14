@@ -20,19 +20,21 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::builder_set_fn, window::Input};
+use crate::utils::builder_set_fn;
 
 pub mod built_in;
 pub mod camera;
 pub mod label;
 pub mod mesh;
 pub mod pipeline;
+pub mod scene;
 pub mod texture;
 use built_in::*;
 use camera::*;
 use label::*;
 use mesh::*;
 use pipeline::*;
+use scene::*;
 use texture::*;
 
 #[derive(Debug)]
@@ -188,9 +190,8 @@ impl RenderState {
         Ok(ret)
     }
 
-    pub fn redraw(&mut self) -> anyhow::Result<()> {
-        self.camera.calculate();
-        self.camera_bind.write(&mut self.queue, &self.camera);
+    pub fn redraw(&mut self, camera: &Camera) -> anyhow::Result<()> {
+        self.camera_bind.write(&mut self.queue, camera);
 
         let texture = self.surface.get_current_texture()?;
         let mut encoder = {
@@ -259,7 +260,7 @@ fn create_depth_texture_bind(
     device: &Device,
     surface_config: &SurfaceConfiguration,
 ) -> Result<TextureBind> {
-    let mut builder = TextureDescBuilder::default();
+    let mut builder = TextureBindBuilder::default();
     builder
         .set_device(device)
         .set_label("Depth")

@@ -19,7 +19,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::builder_set_fn, window::Input};
+use crate::{utils::builder_set_fn};
 
 use super::*;
 
@@ -95,7 +95,7 @@ impl TextureBind {
 }
 
 #[derive(Debug, Default)]
-pub struct TextureDescBuilder<'a> {
+pub struct TextureBindBuilder<'a> {
     device: Option<&'a Device>,
     label: Option<&'a str>,
     width: Option<u32>,
@@ -106,7 +106,7 @@ pub struct TextureDescBuilder<'a> {
 }
 
 
-impl<'a> TextureDescBuilder<'a> {
+impl<'a> TextureBindBuilder<'a> {
     builder_set_fn!(set_device, device, &'a Device);
     builder_set_fn!(set_label, label, &'a str);
     builder_set_fn!(set_width, width, u32);

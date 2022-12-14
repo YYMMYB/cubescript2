@@ -8,15 +8,15 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::builder_set_fn, window::Input};
+use crate::{utils::builder_set_fn};
 
 use super::*;
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct Camera {
-    view_matrix: [[f32; 4]; 4],
-    proj_matrix: [[f32; 4]; 4],
+    pub view_matrix: Matrix4<f32>,
+    pub proj_matrix: Matrix4<f32>,
 
     pub aspect: f32,
     pub fovy: f32,
@@ -79,15 +79,17 @@ pub struct CameraBind {
 
 impl CameraBind {
     pub fn write(&self, queue: &mut Queue, camera: &Camera) {
+        let v:[[f32;4];4]= camera.view_matrix.clone().into();
+        let p:[[f32;4];4]= camera.proj_matrix.clone().into();
         queue.write_buffer(
             &self.view_buffer,
             0,
-            bytemuck::cast_slice(&camera.view_matrix),
+            bytemuck::cast_slice(&v),
         );
         queue.write_buffer(
             &self.proj_buffer,
             0,
-            bytemuck::cast_slice(&camera.proj_matrix),
+            bytemuck::cast_slice(&p),
         );
     }
 
@@ -141,15 +143,17 @@ impl<'d> CameraBindBuilder<'d> {
         let view_buffer_label = get_default_label(&self.label, [Self::VIEW_LABEL, BUFFER_LABEL]);
         let proj_buffer_label = get_default_label(&self.label, [Self::PROJ_LABEL, BUFFER_LABEL]);
 
+        let v:[[f32;4];4]= camera.view_matrix.clone().into();
+        let p:[[f32;4];4]= camera.proj_matrix.clone().into();
         let view_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: view_buffer_label.as_deref(),
-            contents: bytemuck::cast_slice(&camera.view_matrix),
+            contents: bytemuck::cast_slice(&v),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let proj_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: proj_buffer_label.as_deref(),
-            contents: bytemuck::cast_slice(&camera.proj_matrix),
+            contents: bytemuck::cast_slice(&p),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 

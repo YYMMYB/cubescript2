@@ -24,7 +24,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::*, window::Input};
+use crate::{utils::*};
 
 use super::*;
 
