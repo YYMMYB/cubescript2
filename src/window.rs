@@ -1,12 +1,12 @@
-use std::{default, ops::ControlFlow};
+use std::{collections::HashSet, default, ops::ControlFlow};
 
 use anyhow::Result;
 use bitmaps::Bitmap;
 use log::info;
-use nalgebra::Vector2;
+use nalgebra::{Point2, Vector2};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{DeviceEvent, Event, KeyboardInput, ScanCode, VirtualKeyCode, WindowEvent},
+    event::*,
     event_loop::{self, EventLoopWindowTarget},
     window::WindowBuilder,
 };
@@ -20,7 +20,16 @@ pub async fn run() -> Result<()> {
     let mut input = Input::default();
     let mut render = RenderState::init(&window).await?;
     event_loop.run(move |event, target, mut control| {
-        input.handle_event(&event, target, control);
+        match &event {
+            Event::WindowEvent { event, .. } => match event {
+                winit::event::WindowEvent::CloseRequested => control.set_exit(),
+                _ => {}
+            },
+            _ => {}
+        };
+
+        input.handle_event(&event);
+
         if first_frame {
             match event {
                 Event::RedrawEventsCleared => {
@@ -51,104 +60,136 @@ pub async fn run() -> Result<()> {
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum KeyInput {
+    Keyboard(VirtualKeyCode),
+    Mouse(MouseButton),
+}
+
+macro_rules! impl_from_for_keyinput {
+    ($ty:ty, $key:ident) => {
+        impl From<$ty> for KeyInput {
+            fn from(value: $ty) -> Self {
+                KeyInput::$key(value)
+            }
+        }
+    };
+}
+impl_from_for_keyinput!(MouseButton, Mouse);
+impl_from_for_keyinput!(VirtualKeyCode, Keyboard);
+
+// 其实并不是原始输入, 把一帧的多个事件合并了.
+// pressed 事件无视重复输入
+// delta 事件累加
+// 懒了懒了, 就先这么做吧.
 #[derive(Debug, Default)]
 pub struct Input {
-    raw_mouse_dpos: Option<[f32; 2]>,
-    raw_mouse_dwheel: Option<[f32; 2]>,
-    has_focus: bool,
-    frame: u32,
+    mouse_dpos: [f32; 2],
+    mouse_dwheel: [f32; 2],
+    mouse_pos: Option<[f32; 2]>,
+
+    pressed: HashSet<KeyInput>,
+    just_pressed: HashSet<KeyInput>,
+    just_released: HashSet<KeyInput>,
 }
 
 impl Input {
-    pub fn clear_every_frame(&mut self) {
-        *self = Self {
-            has_focus: self.has_focus,
-            frame: self.frame,
-            ..Default::default()
-        }
+    fn clear_every_frame(&mut self) {
+        self.mouse_dpos = [0.0,0.0];
+        self.mouse_dwheel = [0.0,0.0];
+        self.just_pressed.clear();
+        self.just_released.clear();
     }
-    pub fn handle_event(
-        &mut self,
-        event: &Event<()>,
-        target: &EventLoopWindowTarget<()>,
-        control: &mut event_loop::ControlFlow,
-    ) {
+
+    pub fn handle_event(&mut self, event: &Event<()>) {
+        self.record_raw_event(event);
         match event {
             // Event::Suspended => todo!(),
             // Event::Resumed => todo!(),
-            Event::WindowEvent { window_id, event } => match event {
-                winit::event::WindowEvent::Resized(_) => {}
-                winit::event::WindowEvent::CloseRequested => control.set_exit(),
-                winit::event::WindowEvent::Focused(foc) => {
-                    self.has_focus = *foc;
-                }
-                winit::event::WindowEvent::KeyboardInput {
-                    device_id,
-                    input,
-                    is_synthetic,
-                } => {
-                    let KeyboardInput {
-                        scancode,
-                        state,
-                        virtual_keycode,
-                        ..
-                    } = input;
-                }
-                winit::event::WindowEvent::Ime(_) => {}
-                winit::event::WindowEvent::CursorMoved {
-                    device_id,
-                    position,
-                    ..
-                } => {}
-                winit::event::WindowEvent::CursorEntered { device_id } => {}
-                winit::event::WindowEvent::CursorLeft { device_id } => {}
-                winit::event::WindowEvent::MouseWheel {
-                    device_id,
-                    delta,
-                    phase,
-                    ..
-                } => {}
-                winit::event::WindowEvent::MouseInput {
-                    device_id,
-                    state,
-                    button,
-                    ..
-                } => {}
-                _ => {}
-            },
-            Event::DeviceEvent { device_id, event } => match event {
-                DeviceEvent::MouseMotion { delta } => {
-                    let mut mot: [f32; 2] = Default::default();
-                    mot[0] = delta.0 as f32;
-                    mot[1] = delta.1 as f32;
-                    self.raw_mouse_dpos = Some(mot);
-                }
-                DeviceEvent::MouseWheel { delta } => match delta {
-                    winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                        let mut whe: [f32; 2] = Default::default();
-                        whe[0] = *x;
-                        whe[1] = *y;
-                        self.raw_mouse_dwheel = Some(whe);
-                    }
-                    winit::event::MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => {
-                        dbg!(delta);
-                    }
-                },
-                DeviceEvent::Motion { axis, value } => {}
-                DeviceEvent::Button { button, state } => {}
-                DeviceEvent::Text { codepoint } => {
-                    dbg!(&device_id, &codepoint);
-                }
-                _ => {}
-            },
-
-            Event::MainEventsCleared => {}
+            Event::MainEventsCleared => {
+            }
             Event::RedrawRequested(wid) => {}
             Event::RedrawEventsCleared => {
                 self.clear_every_frame();
             }
             Event::LoopDestroyed => {}
             _ => {}
+        }
+    }
+
+    fn record_raw_event(&mut self, event: &Event<()>) {
+        match event {
+            Event::WindowEvent { window_id, event } => match event {
+                WindowEvent::KeyboardInput {
+                    device_id,
+                    input:
+                        KeyboardInput {
+                            state,
+                            virtual_keycode: Some(virtual_keycode),
+                            ..
+                        },
+                    is_synthetic,
+                } => match state {
+                    ElementState::Pressed => self.record_pressed(*virtual_keycode),
+                    ElementState::Released => self.record_released(*virtual_keycode),
+                },
+                WindowEvent::MouseInput {
+                    device_id,
+                    state,
+                    button,
+                    ..
+                } => match state {
+                    ElementState::Pressed => self.record_pressed(*button),
+                    ElementState::Released => self.record_released(*button),
+                },
+                WindowEvent::CursorMoved {
+                    device_id,
+                    position,
+                    ..
+                } => {
+                    self.mouse_pos = Some([position.x as f32, position.y as f32]);
+                }
+                WindowEvent::MouseWheel {
+                    device_id,
+                    delta,
+                    phase,
+                    ..
+                } => match delta {
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        self.mouse_dwheel = [self.mouse_dwheel[0] + *x, self.mouse_dwheel[1] + *y];
+                    }
+                    // 另一个不知道是干啥用的, windows上好像从来没收到过另一种类型的事件
+                    _ => {}
+                },
+                WindowEvent::CursorEntered { device_id } => {}
+                WindowEvent::CursorLeft { device_id } => {}
+                WindowEvent::Ime(_) => {}
+                _ => {}
+            },
+            Event::DeviceEvent { device_id, event } => match event {
+                DeviceEvent::MouseMotion { delta } => {
+                    self.mouse_dpos = [
+                        self.mouse_dpos[0] + delta.0 as f32,
+                        self.mouse_dpos[1] + delta.1 as f32,
+                    ];
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+
+    fn record_pressed(&mut self, key: impl Into<KeyInput>) {
+        let key: KeyInput = key.into();
+        if self.pressed.insert(key) {
+            self.just_pressed.insert(key);
+        }
+    }
+
+    fn record_released(&mut self, key: impl Into<KeyInput>) {
+        let key: KeyInput = key.into();
+        if self.pressed.remove(&key) {
+            self.just_released.insert(key);
         }
     }
 }

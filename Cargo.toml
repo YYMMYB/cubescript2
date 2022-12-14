@@ -10,6 +10,7 @@ nalgebra = "*"
 winit = "*"
 wgpu = "*"
 image = "*"
+gilrs = "*" # 手柄支持, bevy 就用的这个
 
 anyhow = "*"
 bitmaps = "*"
