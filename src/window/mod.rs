@@ -60,38 +60,42 @@ pub async fn run() -> Result<()> {
                 Event::MainEventsCleared => {
                     // 更新时间
                     last_time = time;
-                    input_action.update(&input);
                     time = Some(Instant::now());
                     let dt = time
                         .expect("time未设置")
                         .duration_since(last_time.expect("last_time未设置"))
                         .as_secs_f32();
 
+                    // 更新逻辑输入动作
+                    input_action.update(&input);
+
                     // 更新相机
-                    let rot_speed = 0.1f32;
-                    let move_speed = 5f32;
-                    // 位置
-                    let dpos = dt * move_speed * input_action.get_move();
-                    let dpos = camera
-                        .view_matrix
-                        .try_inverse()
-                        .expect("相机view矩阵不可逆")
-                        .transform_vector(&dpos);
-                    camera.position += dpos;
-                    // 旋转
-                    let dmouse = input.get_mouse_delta_pos();
-                    let mut right = camera.up.cross(&camera.direction);
-                    let rotx = {
-                        let aa = dt * rot_speed * dmouse.y * right;
-                        Rotation3::new(aa)
-                    };
-                    let roty = {
-                        let aa = dt * rot_speed * -dmouse.x * camera.up;
-                        Rotation3::new(aa)
-                    };
-                    camera.direction = roty * (rotx * camera.direction);
-                    // 重新计算矩阵
-                    camera.calculate();
+                    {
+                        let rot_speed = 0.1f32;
+                        let move_speed = 5f32;
+                        // 位置
+                        let dpos = dt * move_speed * input_action.get_move();
+                        let dpos = camera
+                            .view_matrix
+                            .try_inverse()
+                            .expect("相机view矩阵不可逆")
+                            .transform_vector(&dpos);
+                        camera.position += dpos;
+                        // 旋转
+                        let dmouse = input.get_mouse_delta_pos();
+                        let mut right = camera.up.cross(&camera.direction);
+                        let rotx = {
+                            let aa = dt * rot_speed * dmouse.y * right;
+                            Rotation3::new(aa)
+                        };
+                        let roty = {
+                            let aa = dt * rot_speed * -dmouse.x * camera.up;
+                            Rotation3::new(aa)
+                        };
+                        camera.direction = roty * (rotx * camera.direction);
+                        // 重新计算矩阵
+                        camera.calculate();
+                    }
 
                     window.request_redraw();
                 }

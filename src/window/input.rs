@@ -194,12 +194,6 @@ impl InputAction {
             VirtualKeyCode::Space.into(),
             VirtualKeyCode::LShift.into(),
         ];
-        if input.is_just_pressed(VirtualKeyCode::F){
-            println!("Just Pressed FFF");
-        }
-        if input.is_just_released(VirtualKeyCode::F){
-            println!("Just Released FFF");
-        }
         for k in wasd.iter() {
             if input.is_just_pressed(*k) {
                 self.wasd_hold.push(*k);
