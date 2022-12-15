@@ -223,32 +223,32 @@ impl InputAction {
         for k in self.wasd_hold.iter().rev() {
             match k {
                 KeyInput::Keyboard(k) => match *k {
-                    VirtualKeyCode::W => {
+                    VirtualKeyCode::D => {
                         if self.pos_move.x == 0f32 {
                             self.pos_move.x = 1f32
                         }
                     }
-                    VirtualKeyCode::S => {
+                    VirtualKeyCode::A => {
                         if self.pos_move.x == 0f32 {
                             self.pos_move.x = -1f32
                         }
                     }
-                    VirtualKeyCode::D => {
+                    VirtualKeyCode::Space => {
                         if self.pos_move.y == 0f32 {
                             self.pos_move.y = 1f32
                         }
                     }
-                    VirtualKeyCode::A => {
+                    VirtualKeyCode::LShift => {
                         if self.pos_move.y == 0f32 {
                             self.pos_move.y = -1f32
                         }
                     }
-                    VirtualKeyCode::Space => {
+                    VirtualKeyCode::S => {
                         if self.pos_move.z == 0f32 {
                             self.pos_move.z = 1f32
                         }
                     }
-                    VirtualKeyCode::LShift => {
+                    VirtualKeyCode::W => {
                         if self.pos_move.z == 0f32 {
                             self.pos_move.z = -1f32
                         }
@@ -261,6 +261,6 @@ impl InputAction {
     }
 
     pub fn get_move(&self) -> Vector3<f32> {
-        Vector3::<f32>::zeros()
+        self.pos_move
     }
 }

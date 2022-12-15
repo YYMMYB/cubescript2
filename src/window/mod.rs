@@ -48,7 +48,6 @@ pub async fn run() -> Result<()> {
             }
         } else {
             input.handle_event(&event);
-            input_action.update(&input);
             match event {
                 Event::WindowEvent { event, window_id } => match event {
                     WindowEvent::Resized(size) => {
@@ -61,6 +60,7 @@ pub async fn run() -> Result<()> {
                 Event::MainEventsCleared => {
                     // 更新时间
                     last_time = time;
+                    input_action.update(&input);
                     time = Some(Instant::now());
                     let dt = time
                         .expect("time未设置")
