@@ -83,9 +83,9 @@ pub async fn run() -> Result<()> {
                         camera.position += dpos;
                         // 旋转
                         let dmouse = input.get_mouse_delta_pos();
-                        let mut right = camera.up.cross(&camera.direction);
+                        let mut right = camera.direction.cross(&camera.up);
                         let rotx = {
-                            let aa = dt * rot_speed * dmouse.y * right;
+                            let aa = dt * rot_speed * -dmouse.y * right;
                             Rotation3::new(aa)
                         };
                         let roty = {

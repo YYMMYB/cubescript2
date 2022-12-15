@@ -62,8 +62,7 @@ impl Input {
         match event {
             // Event::Suspended => todo!(),
             // Event::Resumed => todo!(),
-            Event::MainEventsCleared => {
-            }
+            Event::MainEventsCleared => {}
             Event::RedrawRequested(wid) => {}
             Event::RedrawEventsCleared => {
                 self.clear_every_frame();
@@ -85,10 +84,15 @@ impl Input {
                             ..
                         },
                     is_synthetic,
-                } => match state {
-                    ElementState::Pressed => self.record_pressed(*virtual_keycode),
-                    ElementState::Released => self.record_released(*virtual_keycode),
-                },
+                } => {
+                    if *is_synthetic {
+                        println!("SYN {:?}", virtual_keycode);
+                    }
+                    match state {
+                        ElementState::Pressed => self.record_pressed(*virtual_keycode),
+                        ElementState::Released => self.record_released(*virtual_keycode),
+                    }
+                }
                 WindowEvent::MouseInput {
                     device_id,
                     state,
@@ -179,7 +183,6 @@ impl Input {
 #[derive(Debug, Default)]
 pub struct InputAction {
     wasd_hold: Vec<KeyInput>,
-
     pos_move: Vector3<f32>,
 }
 
@@ -200,7 +203,7 @@ impl InputAction {
             }
             if input.is_just_released(*k) {
                 let mut idx = None;
-                for i in 0..4 {
+                for i in 0..wasd.len() {
                     if self.wasd_hold[i] == *k {
                         idx = Some(i);
                         break;
