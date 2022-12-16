@@ -136,7 +136,6 @@ impl RenderState {
         // bind group 结束
         bind_group_layouts.push(lay);
         bind_groups.push(bg);
-        dbg!(&bind_group_layouts, &bind_groups);
 
         // pipeline
         let layout = {

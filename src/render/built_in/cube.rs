@@ -105,7 +105,6 @@ pub struct CubeInstance {
 
 impl CubeInstance {
     pub fn attr_desc() -> VertexAttributeLayoutOwner {
-        let a: VertexFormat = VertexFormat::Uint8x4;
         let attributes = vertex_attribute_layout!(Self, struct, {
             2;info ; Uint8x4,
             3;position ; Float32x3,
@@ -145,12 +144,6 @@ impl ConstResource {
             contents: cast_slice(&self.rot_mat),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
-        // let i= [3f32];
-        // let rot_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        //     label: Some("Cube Resource Rot Matrix"),
-        //     contents: cast_slice(&i),
-        //     usage: BufferUsages::UNIFORM,
-        // });
         ConstResourceBind {
             rot_mat: rot_buffer,
         }
@@ -171,8 +164,6 @@ impl ConstResourceBind {
             resource: self.rot_mat.as_entire_binding(),
             visibility: ShaderStages::VERTEX,
             count: None,
-            // count: Some(NonZeroU32::new(3 as u32).unwrap()),
-            // count: None,
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
