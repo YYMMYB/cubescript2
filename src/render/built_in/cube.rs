@@ -31,42 +31,73 @@ use crate::{
 
 use super::super::*;
 
+// +x 面, 需要与 id 为 000000 的方向保持一直, orient 才能合理的表示方向.
 pub const TEST_VERTICES: &[CubeVertx] = &[
     CubeVertx {
-        position: [-1.0, -1.0, 0.0],
+        position: [  1.0, -1.0, -1.0, ],
         tex_coords: [0.0, 0.0],
     },
     CubeVertx {
-        position: [1.0, -1.0, 0.0],
-        tex_coords: [1.0, 0.0],
-    },
-    CubeVertx {
-        position: [1.0, 1.0, 0.0],
-        tex_coords: [1.0, 0.0],
-    },
-    CubeVertx {
-        position: [-1.0, 1.0, 0.0],
+        position: [  1.0, -1.0, 1.0, ],
         tex_coords: [0.0, 0.0],
+    },
+    CubeVertx {
+        position: [  1.0, 1.0, 1.0, ],
+        tex_coords: [1.0, 0.0],
+    },
+    CubeVertx {
+        position: [  1.0, 1.0, -1.0, ],
+        tex_coords: [1.0, 0.0],
     },
 ];
 
 pub const TEST_INDICES: &[u16] = &[2, 3, 0, 0, 1, 2];
 
 pub const TEST_INSTANCES: &[CubeInstance] = &[
+    // 参考 黑
     CubeInstance {
-        info: [2, 0, 0, 0],
-        position: [0.0, 1.0, -3.0],
-        color: [1.0, 0.1, 0.1],
+        info: [0, 0, 0b100000, 0],
+        position: [0.0, 0.0, -10.0],
+        color: [0.0, 0.0, 0.0],
     },
+    // -x 红
     CubeInstance {
-        info: [1, 0, 16, 0],
-        position: [0.0, 0.0, -2.0],
-        color: [0.1, 1.0, 0.1],
+        info: [0, 0, 0b000100, 0],
+        position: [0.0,0.0,0.0],
+        color: [1.0, 0.01, 0.01],
     },
+    // +x 红
     CubeInstance {
-        info: [0, 0, 32, 0],
-        position: [0.0, -1.0, -1.0],
-        color: [0.1, 0.1, 1.0],
+        info: [0, 0, 0b000000, 0],
+        position: [0.0,0.0,0.0],
+
+        color: [1.0, 0.01, 0.01],
+    },
+    // -y 绿
+    CubeInstance {
+        info: [0, 0, 0b010100, 0],
+        position: [0.0,0.0,0.0],
+
+        color: [0.01, 1.0, 0.01],
+    },
+    // +y 绿
+    CubeInstance {
+        info: [0, 0, 0b010000, 0],
+        position: [0.0,0.0,0.0],
+
+        color: [0.01, 1.0, 0.01],
+    },
+    // -z 蓝
+    CubeInstance {
+        info: [0, 0, 0b100100, 0],
+        position: [0.0,0.0,0.0],
+        color: [0.01, 0.01, 1.0],
+    },
+    // +z 蓝
+    CubeInstance {
+        info: [0, 0, 0b100000, 0],
+        position: [0.0,0.0,0.0],
+        color: [0.01, 0.01, 1.0],
     },
 ];
 
@@ -121,20 +152,20 @@ impl CubeInstance {
 impl VSInstance for CubeInstance {}
 
 const ORIENT_COUNT: usize = 48;
+type MATRIX  = [[f32;4];4];
 #[derive(Debug)]
 pub struct ConstResource {
-    pub rot_mat: [[[f32; 4]; 4]; 48],
+    pub rot_mat: [MATRIX; ORIENT_COUNT],
 }
 
 impl ConstResource {
     pub fn init() -> Self {
-        let rot: [[f32; 4]; 4] = Default::default();
-        let mut rot_mat: [[[f32; 4]; 4]; ORIENT_COUNT] = [rot; ORIENT_COUNT];
+        let rot: MATRIX = Default::default();
+        let mut rot_mat: [MATRIX; ORIENT_COUNT] = [rot; ORIENT_COUNT];
         for code in 0..ORIENT_COUNT as u8 {
             let orint = Orient::<CompressedData>::decode(code).uncompress();
             let mat = orint.to_matrix();
-            let mat = mat.to_homogeneous();
-            rot_mat[code as usize] = mat.into();
+            rot_mat[code as usize] = mat.to_homogeneous().into();
         }
         Self { rot_mat }
     }
@@ -150,16 +181,13 @@ impl ConstResource {
     }
 }
 
-const SPLIT_COUNT: usize = 4;
 #[derive(Debug)]
 pub struct ConstResourceBind {
     pub rot_mat: Buffer,
 }
 
 impl ConstResourceBind {
-    pub fn get_entries_desc<'a>(
-        &'a self,
-    ) -> [BindGroupBuilderEntryDesc<'a>; 1] {
+    pub fn get_entries_desc<'a>(&'a self) -> [BindGroupBuilderEntryDesc<'a>; 1] {
         let rot_desc = BindGroupBuilderEntryDesc {
             resource: self.rot_mat.as_entire_binding(),
             visibility: ShaderStages::VERTEX,

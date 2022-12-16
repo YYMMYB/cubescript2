@@ -74,8 +74,8 @@ pub async fn run() -> Result<()> {
 
                     // 更新相机
                     {
-                        let rot_speed = 0.1f32;
-                        let move_speed = 5f32;
+                        let rot_speed = 0.2f32;
+                        let move_speed = 10f32;
                         // 位置
                         let dpos = dt * move_speed * input_action.get_move();
                         let dpos = camera

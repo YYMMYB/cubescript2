@@ -38,7 +38,7 @@ fn get_info(c: vec4<u32>) -> Info {
 }
 
 @group(1) @binding(0)
-var<storage, read> rot_mat_array: array<mat3x3<f32>, 12>; 
+var<storage, read> rot_mat_array: array<mat4x4<f32>, 48>; 
 
 // @group(1) @binding(0)
 // var<uniform> ttt : f32; 
@@ -58,8 +58,10 @@ fn vertex_main(
     var s = exp2(f32(info.exp));
     var pos = (s * model.position);
 
+    var pos4 = vec4<f32>(pos, 1.0);
     var rot = rot_mat_array[info.rot_id];
-    pos = rot * pos;
+    pos4 = (rot * pos4);
+    pos = pos4.xyz;
 
     // pos = pos + vec3<f32>(0.0, ttt, 0.0);
 
