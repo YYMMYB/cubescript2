@@ -1,6 +1,6 @@
 use std::{collections::HashSet, default, ops::ControlFlow, time::*};
 
-use anyhow::Result;
+use anyhow::{Result, Ok};
 use bitmaps::Bitmap;
 use log::info;
 use nalgebra::{Point2, Rotation3, Vector2};
@@ -25,7 +25,10 @@ pub async fn run() -> Result<()> {
     let mut input = Input::default();
     let mut input_action = InputAction::default();
     let mut camera = create_camera(&window);
-    let mut render = RenderState::init(&window).await?;
+    let mut render = RenderState::init(&window, &camera).await?;
+    let size = window.inner_size();
+    render.resize(&mut camera, size.width, size.height)?;
+
     event_loop.run(move |event, target, mut control| {
         match &event {
             Event::WindowEvent { event, .. } => match event {
@@ -52,7 +55,7 @@ pub async fn run() -> Result<()> {
                 Event::WindowEvent { event, window_id } => match event {
                     WindowEvent::Resized(size) => {
                         if size.width > 0 && size.height > 0 {
-                            render.resize(size.width, size.height);
+                            render.resize(&mut camera, size.width, size.height);
                         }
                     }
                     _ => {}

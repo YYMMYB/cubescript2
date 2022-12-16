@@ -43,19 +43,21 @@ pub struct RenderState {
     pub queue: Queue,
     pub surface: Surface,
     pub surface_config: SurfaceConfiguration,
-    pub cube_pipeline: RenderPipeline,
 
-    pub camera: Camera,
     pub camera_bind: CameraBind,
     pub bind_groups: Vec<BindGroup>,
     pub clear_color: Color,
     pub depth_texture_bind: TextureBind,
 
+    pub cube_const_resource: cube::ConstResource,
+    pub cube_const_resource_bind: cube::ConstResourceBind,
+    pub cube_pipeline: RenderPipeline,
+
     pub mesh_manager: MeshManager,
 }
 
 impl RenderState {
-    pub async fn init(window: &Window) -> Result<RenderState> {
+    pub async fn init(window: &Window, camera: &Camera) -> Result<RenderState> {
         // 创建 surface(交换链)
         let instance = Instance::new(Backends::all());
         let surface = unsafe { instance.create_surface(window) };
@@ -74,10 +76,12 @@ impl RenderState {
         };
 
         let (device, queue) = {
+            let mut limits = Limits::default();
+            limits.min_uniform_buffer_offset_alignment = 64;
             let desc = DeviceDescriptor {
                 label: None,
-                features: Features::empty(),
-                limits: Limits::default(),
+                features: Features::BUFFER_BINDING_ARRAY,
+                limits: limits,
             };
             adapter
                 .request_device(&desc, None)
@@ -109,11 +113,6 @@ impl RenderState {
         let mut group_bd = BindGroupBuider::default();
         group_bd.set_device(&device).set_label("Per Frame");
 
-        // 相机
-        let mut camera = Camera::default();
-        camera.position = Point3::new(0.0, 0.0, 3.0);
-        camera.calculate();
-
         // 相机 bind, 并增加到 bind group.
         let mut builder = CameraBindBuilder::default();
         builder
@@ -129,11 +128,23 @@ impl RenderState {
         bind_group_layouts.push(lay);
         bind_groups.push(bg);
 
+        // bind group 开始 cube
+        let cube_const_resource = cube::ConstResource::init();
+        let cube_const_resource_bind = cube_const_resource.create_bind(&device);
+        cube_const_resource_bind.write(&queue, &cube_const_resource);
+        let (lay, bg) = cube::build_bind_group(&device, &cube_const_resource_bind)?;
+        // bind group 结束
+        bind_group_layouts.push(lay);
+        bind_groups.push(bg);
+        dbg!(&bind_group_layouts, &bind_groups);
+
         // pipeline
         let layout = {
             let desc = PipelineLayoutDescriptor {
                 label: Some("Cube Pipline Layout"),
-                bind_group_layouts: &[&bind_group_layouts[0]],
+                bind_group_layouts: &[&bind_group_layouts[0], &bind_group_layouts[1]],
+                // bind_group_layouts: &[&bind_group_layouts[0]],
+                // todo 相机vp, dt每帧更新的都换成 push_constants
                 push_constant_ranges: &[],
             };
             device.create_pipeline_layout(&desc)
@@ -179,14 +190,14 @@ impl RenderState {
             surface,
             surface_config,
             cube_pipeline,
-            camera,
             camera_bind,
             bind_groups,
             clear_color,
             depth_texture_bind,
             mesh_manager,
+            cube_const_resource,
+            cube_const_resource_bind,
         };
-        ret.resize(ret.surface_config.width, ret.surface_config.height)?;
         Ok(ret)
     }
 
@@ -235,6 +246,7 @@ impl RenderState {
             }
             render_pass.set_pipeline(&self.cube_pipeline);
             render_pass.set_bind_group(0, &self.bind_groups[0], &[]);
+            render_pass.set_bind_group(1, &self.bind_groups[1], &[]);
             render_pass.set_vertex_buffer(0, cube_bind.vertex_bind.slice(..));
             render_pass.set_vertex_buffer(1, cube_bind.instance_bind.slice(..));
             render_pass.set_index_buffer(cube_bind.index_bind.slice(..), cube_mesh.index_format);
@@ -246,11 +258,11 @@ impl RenderState {
         Ok(())
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
+    pub fn resize(&mut self, camera: &mut Camera, width: u32, height: u32) -> Result<()> {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
-        self.camera.aspect = width as f32 / height as f32;
+        camera.aspect = width as f32 / height as f32;
         self.depth_texture_bind = create_depth_texture_bind(&self.device, &self.surface_config)?;
         Ok(())
     }
