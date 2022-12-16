@@ -25,23 +25,22 @@ fn hsb2rgb(c: vec3<f32>) -> vec3<f32> {
 
 struct Info {
     exp: u32,
-    tex_index: u32,
     rot_id: u32,
+    tex_index0: u32,
+    tex_index1: u32,
 }
 
 fn get_info(c: vec4<u32>) -> Info {
     var info: Info;
     info.exp = c.x;
-    info.tex_index = c.y;
-    info.rot_id = c.z;
+    info.rot_id = c.y;
+    info.tex_index0 = c.z;
+    info.tex_index1 = c.w;
     return info;
 }
 
 @group(1) @binding(0)
-var<storage, read> rot_mat_array: array<mat4x4<f32>, 48>; 
-
-// @group(1) @binding(0)
-// var<uniform> ttt : f32; 
+var<uniform> rot_mat_array: array<mat4x4<f32>, 48>; 
 
 @group(0) @binding(0)
 var<uniform> view_mat: mat4x4<f32>; 
@@ -59,7 +58,7 @@ fn vertex_main(
     var pos = (s * model.position);
 
     var pos4 = vec4<f32>(pos, 1.0);
-    var rot = rot_mat_array[info.rot_id];
+    let rot = rot_mat_array[info.rot_id];
     pos4 = (rot * pos4);
     pos = pos4.xyz;
 

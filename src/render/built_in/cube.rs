@@ -34,19 +34,19 @@ use super::super::*;
 // +x 面, 需要与 id 为 000000 的方向保持一直, orient 才能合理的表示方向.
 pub const TEST_VERTICES: &[CubeVertx] = &[
     CubeVertx {
-        position: [  1.0, -1.0, -1.0, ],
+        position: [1.0, -1.0, -1.0],
         tex_coords: [0.0, 0.0],
     },
     CubeVertx {
-        position: [  1.0, -1.0, 1.0, ],
+        position: [1.0, -1.0, 1.0],
         tex_coords: [0.0, 0.0],
     },
     CubeVertx {
-        position: [  1.0, 1.0, 1.0, ],
+        position: [1.0, 1.0, 1.0],
         tex_coords: [1.0, 0.0],
     },
     CubeVertx {
-        position: [  1.0, 1.0, -1.0, ],
+        position: [1.0, 1.0, -1.0],
         tex_coords: [1.0, 0.0],
     },
 ];
@@ -56,47 +56,47 @@ pub const TEST_INDICES: &[u16] = &[2, 3, 0, 0, 1, 2];
 pub const TEST_INSTANCES: &[CubeInstance] = &[
     // 参考 黑
     CubeInstance {
-        info: [0, 0, 0b100000, 0],
+        info: [0, 0b100000, 0, 0],
         position: [0.0, 0.0, -10.0],
         color: [0.0, 0.0, 0.0],
     },
     // -x 红
     CubeInstance {
-        info: [0, 0, 0b000100, 0],
-        position: [0.0,0.0,0.0],
+        info: [0, 0b000100, 0, 0],
+        position: [0.0, 0.0, 0.0],
         color: [1.0, 0.01, 0.01],
     },
     // +x 红
     CubeInstance {
-        info: [0, 0, 0b000000, 0],
-        position: [0.0,0.0,0.0],
+        info: [0, 0b000000, 0, 0],
+        position: [0.0, 0.0, 0.0],
 
         color: [1.0, 0.01, 0.01],
     },
     // -y 绿
     CubeInstance {
-        info: [0, 0, 0b010100, 0],
-        position: [0.0,0.0,0.0],
+        info: [0, 0b010100, 0, 0],
+        position: [0.0, 0.0, 0.0],
 
         color: [0.01, 1.0, 0.01],
     },
     // +y 绿
     CubeInstance {
-        info: [0, 0, 0b010000, 0],
-        position: [0.0,0.0,0.0],
+        info: [0, 0b010000, 0, 0],
+        position: [0.0, 0.0, 0.0],
 
         color: [0.01, 1.0, 0.01],
     },
     // -z 蓝
     CubeInstance {
-        info: [0, 0, 0b100100, 0],
-        position: [0.0,0.0,0.0],
+        info: [0, 0b100100, 0, 0],
+        position: [0.0, 0.0, 0.0],
         color: [0.01, 0.01, 1.0],
     },
     // +z 蓝
     CubeInstance {
-        info: [0, 0, 0b100000, 0],
-        position: [0.0,0.0,0.0],
+        info: [0, 0b100000, 0, 0],
+        position: [0.0, 0.0, 0.0],
         color: [0.01, 0.01, 1.0],
     },
 ];
@@ -129,8 +129,8 @@ impl VSVertex for CubeVertx {}
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct CubeInstance {
-    info: [u8; 4], // [exp, texure_index, rotation_id(0..24), 0]
-    position: [f32; 3],
+    info: [u8; 4], // [指数(2的几次方, 缩放用), 旋转id(0..48), 贴图id与偏移0(低位), 贴图id与偏移1(高位)]
+    position: [f32; 3], // 先做info里的rotation_id, 再做这里的position
     color: [f32; 3],
 }
 
@@ -152,7 +152,7 @@ impl CubeInstance {
 impl VSInstance for CubeInstance {}
 
 const ORIENT_COUNT: usize = 48;
-type MATRIX  = [[f32;4];4];
+type MATRIX = [[f32; 4]; 4];
 #[derive(Debug)]
 pub struct ConstResource {
     pub rot_mat: [MATRIX; ORIENT_COUNT],
@@ -173,7 +173,7 @@ impl ConstResource {
         let rot_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Cube Resource Rot Matrix"),
             contents: cast_slice(&self.rot_mat),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
         ConstResourceBind {
             rot_mat: rot_buffer,
@@ -193,7 +193,7 @@ impl ConstResourceBind {
             visibility: ShaderStages::VERTEX,
             count: None,
             ty: BindingType::Buffer {
-                ty: BufferBindingType::Storage { read_only: true },
+                ty: BufferBindingType::Uniform,
                 has_dynamic_offset: false,
                 min_binding_size: None,
             },
