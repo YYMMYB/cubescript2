@@ -60,7 +60,7 @@ fn vertex_main(
 
     let pos4 = vec4<f32>(pos, 1.0);
     let rot = rot_mat_array[info.rot_id];
-    // let pos4 = (rot * pos4);
+    let pos4 = (rot * pos4);
     let pos = pos4.xyz;
 
     // instance 的位置

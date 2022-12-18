@@ -35,42 +35,29 @@ impl Orient<Data> {
         // signN 代表对应轴的方向, 1(不变, 即:正到正), -1(变, 即:正到负),
         // 这是为了在简单的编码解码上,可以让000000代表单位变换.
 
-        let axis0 = axis_add(self.axis, 0);
-        let sign0 = (self.sign * 2 - 1) * -1;
-        // 列出来就完了, 整什么算法
+        // rot 为 0 时.
+        let axis0 = axis_add(self.axis, 0,3);
+        let sign0 = map_01!(self.sign, i32);
+        // 下面的 "从V方向看", 都是: 从V指向你的方向看(即视线方向和V相反).
+        // 直接让 y 映射到: 从norm方向看时, 逆时针旋转, 遭遇的第一个正轴. 这样方便正负号的计算.
+        // 计算方法解释: 右手系中, 逆时针旋转, 无论 norm 是 x,y,z 哪个轴,
+        // 从_正_方向看时, 总是 [+a, +(a+1), -a, -(a+1)] 的顺序 (这时记另一个轴 _b=a+1_)
+        // 从_负_方向看时, 总是 [+a, +(a-1), -a, -(a-1)] 的顺序 (这是记另一个轴 _b=a-1_)
+        // 而 a,b 又不能是 norm (即不能是指向你的方向). 所以, 
+        // _正_方向时, 为了让 a, b(即_a+1_) 不等于 norm, 则 a 只能是 _norm+1_.
+        // _负_方向时, 为了让 a, b(即_a-1_) 不等于 norm, 则 a 只能是 _norm-1_.
+        let mut axis1 = axis_add(axis0, sign0,3);
+        let mut sign1 = 1;
+        let mut axis2 = axis_add(axis0, -sign0,3);
+        let mut sign2 = 1;
+
+        const SIGN_LOOP:[i32;5] = [1,1,-1,-1,1];
         let rot = self.rot as usize;
-        const P1_AXIS_LOOP: [i32; 4] = [-1, -2, -1, -2];
-        const N1_AXIS_LOOP: [i32; 4] = [-1, -2, -1, -2];
-        const P2_AXIS_LOOP: [i32; 4] = [1, 2, 1, 2]; // * -1
-        const N2_AXIS_LOOP: [i32; 4] = [1, 2, 1, 2]; // * -1
-        const P1_SIGN_LOOP: [i32; 4] = [1, 1, -1, -1];
-        const N1_SIGN_LOOP: [i32; 4] = [1, -1, -1, 1]; // 逆序 或 idx+1
-        const P2_SIGN_LOOP: [i32; 4] = [1, -1, -1, 1]; // 逆序 或 idx+1
-        const N2_SIGN_LOOP: [i32; 4] = [-1, -1, 1, 1]; // * -1
-        let a1l = if sign0 > 0 {
-            P1_AXIS_LOOP
-        } else {
-            N1_AXIS_LOOP
-        };
-        let s1l = if sign0 > 0 {
-            P1_SIGN_LOOP
-        } else {
-            N1_SIGN_LOOP
-        };
-        let axis1 = axis_add(axis0, a1l[rot]);
-        let sign1 = sign0 * s1l[rot];
-        let a2l = if sign0 > 0 {
-            P2_AXIS_LOOP
-        } else {
-            N2_AXIS_LOOP
-        };
-        let s2l = if sign0 > 0 {
-            P2_SIGN_LOOP
-        } else {
-            N2_SIGN_LOOP
-        };
-        let axis2 = axis_add(axis0, a2l[rot]);
-        let sign2 = sign0 * s2l[rot];
+        let flip = map_01!(self.flip, i32);
+        sign1 = SIGN_LOOP[rot];
+        sign2 = SIGN_LOOP[rot + 1] * flip;
+
+
         let mut m: [[f32; 3]; 3] = Default::default();
         // 第3列
         m[2][axis2 as usize] = sign2 as f32;
@@ -83,13 +70,13 @@ impl Orient<Data> {
     }
 }
 
-fn axis_add(axis: i32, d: i32) -> i32 {
+fn axis_add(axis: i32, d: i32, n:i32) -> i32 {
     let res = axis + d;
     if res < 0 {
         let abs = res.abs();
-        3 - (abs % 3)
+        n - (abs % n)
     } else {
-        res % 3
+        res % n
     }
 }
 
@@ -129,6 +116,13 @@ impl Orient<CompressedData> {
     }
 }
 
+macro_rules! map_01 {
+    ($n:expr, $t:ty) => {
+        ($n * 2 as $t - 1 as $t) * -(1 as $t);
+    };
+}
+pub(self) use map_01;
+
 #[cfg(test)]
 mod tests {
     use std::fmt::Display;
@@ -141,6 +135,8 @@ mod tests {
             c, o.sign, o.axis, o.rot, o.flip
         )
     }
+
+    #[test]
     fn show_decode() {
         let codes = MAIN_DIR;
         for c in codes {
@@ -149,6 +145,7 @@ mod tests {
         }
     }
 
+    #[test]
     fn show_to_mat() {
         let codes = MAIN_DIR;
         for c in codes {

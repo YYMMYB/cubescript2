@@ -60,45 +60,42 @@ pub const TEST_INSTANCES: &[CubeInstance] = &[
         position: [0.0, 0.0, -4.0],
         color: [1.0, 1.0, 1.0],
     },
-    // // -x 红
-    // CubeInstance {
-    //     info: [0, 0b000100, 0, 0],
-    //     position: [0.0, 0.0, 0.0],
-    //     color: [1.0, 0.01, 0.01],
-    // },
-    // // +x 红
-    // CubeInstance {
-    //     info: [0, 0b000000, 0, 0],
-    //     position: [0.0, 0.0, 0.0],
-
-    //     color: [1.0, 0.01, 0.01],
-    // },
-    // // -y 绿
-    // CubeInstance {
-    //     info: [0, 0b010100, 0, 0],
-    //     position: [0.0, 0.0, 0.0],
-
-    //     color: [0.01, 1.0, 0.01],
-    // },
-    // // +y 绿
-    // CubeInstance {
-    //     info: [0, 0b010000, 0, 0],
-    //     position: [0.0, 0.0, 0.0],
-
-    //     color: [0.01, 1.0, 0.01],
-    // },
-    // // -z 蓝
-    // CubeInstance {
-    //     info: [0, 0b100100, 0, 0],
-    //     position: [0.0, 0.0, 0.0],
-    //     color: [0.01, 0.01, 1.0],
-    // },
-    // // +z 蓝
-    // CubeInstance {
-    //     info: [0, 0b100000, 0, 0],
-    //     position: [0.0, 0.0, 0.0],
-    //     color: [0.01, 0.01, 1.0],
-    // },
+    // -x 红
+    CubeInstance {
+        info: [0, 0b000100, 0, 0],
+        position: [0.0, 0.0, 0.0],
+        color: [1.0, 0.01, 0.01],
+    },
+    // +x 红
+    CubeInstance {
+        info: [0, 0b000000, 0, 0],
+        position: [0.0, 0.0, 0.0],
+        color: [1.0, 0.01, 0.01],
+    },
+    // -y 绿
+    CubeInstance {
+        info: [0, 0b010100, 0, 0],
+        position: [0.0, 0.0, 0.0],
+        color: [0.01, 1.0, 0.01],
+    },
+    // +y 绿
+    CubeInstance {
+        info: [0, 0b010000, 0, 0],
+        position: [0.0, 0.0, 0.0],
+        color: [0.01, 1.0, 0.01],
+    },
+    // -z 蓝
+    CubeInstance {
+        info: [0, 0b100100, 0, 0],
+        position: [0.0, 0.0, 0.0],
+        color: [0.01, 0.01, 1.0],
+    },
+    // +z 蓝
+    CubeInstance {
+        info: [0, 0b100000, 0, 0],
+        position: [0.0, 0.0, 0.0],
+        color: [0.01, 0.01, 1.0],
+    },
 ];
 
 #[repr(C)]
