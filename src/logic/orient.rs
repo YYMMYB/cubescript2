@@ -6,9 +6,9 @@ pub type Code = u8;
 
 // 编码格式: ("口" 是用来对齐的, 没意义)
 // 二进制值    0       0       0       0       0       0
-// 口口口口    ↑               ↑       ↑       ↑
-// 字段名口    |axis           |flip   |sign   |rot
-// 取值范围    |0..3           |0,1    |0,1    |0..4
+// 口口口口    ↑               ↑       ↑               ↑
+// 字段名口    |axis           |sign   |rot            |flip
+// 取值范围    |0..3           |0,1    |0..4           |0,1
 #[derive(Debug)]
 pub struct Orient<T> {
     pub rot: T,  // 沿着法线旋转几个90度, 取值是: 0,1,2,3
@@ -28,7 +28,7 @@ impl Orient<Data> {
     }
 
     // 注意是 3x3 的矩阵, 而非 4x4 的. 因为没有位移
-    pub fn to_matrix(&self) -> Matrix3<f32> {
+    pub fn to_matrix_without_flip(&self) -> Matrix3<f32> {
         // axis0 代表 norm 的方向, 实现上是把原 正x轴 映射到 axis0 * sign
         // axis1 代表 up 的方向, 实现上是把原 正y轴 映射到 axis1 * sign
         // axis2 代表 剩下的那个方向, 实现上是把原 正z轴 映射到 axis2 * sign
@@ -36,27 +36,29 @@ impl Orient<Data> {
         // 这是为了在简单的编码解码上,可以让000000代表单位变换.
 
         // rot 为 0 时.
-        let axis0 = axis_add(self.axis, 0,3);
+        let axis0 = axis_add(self.axis, 0, 3);
         let sign0 = map_01!(self.sign, i32);
         // 下面的 "从V方向看", 都是: 从V指向你的方向看(即视线方向和V相反).
         // 直接让 y 映射到: 从norm方向看时, 逆时针旋转, 遭遇的第一个正轴. 这样方便正负号的计算.
         // 计算方法解释: 右手系中, 逆时针旋转, 无论 norm 是 x,y,z 哪个轴,
         // 从_正_方向看时, 总是 [+a, +(a+1), -a, -(a+1)] 的顺序 (这时记另一个轴 _b=a+1_)
         // 从_负_方向看时, 总是 [+a, +(a-1), -a, -(a-1)] 的顺序 (这是记另一个轴 _b=a-1_)
-        // 而 a,b 又不能是 norm (即不能是指向你的方向). 所以, 
+        // 而 a,b 又不能是 norm (即不能是指向你的方向). 所以,
         // _正_方向时, 为了让 a, b(即_a+1_) 不等于 norm, 则 a 只能是 _norm+1_.
         // _负_方向时, 为了让 a, b(即_a-1_) 不等于 norm, 则 a 只能是 _norm-1_.
-        let mut axis1 = axis_add(axis0, sign0,3);
+        let mut axis1 = axis_add(axis0, sign0, 3);
         let mut sign1 = 1;
-        let mut axis2 = axis_add(axis0, -sign0,3);
+        let mut axis2 = axis_add(axis0, -sign0, 3);
         let mut sign2 = 1;
 
-        const SIGN_LOOP:[i32;5] = [1,1,-1,-1,1];
+        const AXIS_LOOP: [i32; 4] = [0, 1, 0, 1];
+        const SIGN_LOOP: [i32; 5] = [1, 1, -1, -1, 1];
         let rot = self.rot as usize;
         let flip = map_01!(self.flip, i32);
+        axis1 = axis_add(axis1, AXIS_LOOP[rot] * sign0, 3);
+        axis2 = axis_add(axis2, AXIS_LOOP[rot] * -sign0, 3);
         sign1 = SIGN_LOOP[rot];
-        sign2 = SIGN_LOOP[rot + 1] * flip;
-
+        sign2 = SIGN_LOOP[rot + 1];
 
         let mut m: [[f32; 3]; 3] = Default::default();
         // 第3列
@@ -70,7 +72,7 @@ impl Orient<Data> {
     }
 }
 
-fn axis_add(axis: i32, d: i32, n:i32) -> i32 {
+fn axis_add(axis: i32, d: i32, n: i32) -> i32 {
     let res = axis + d;
     if res < 0 {
         let abs = res.abs();
@@ -95,17 +97,39 @@ impl Orient<CompressedData> {
     }
 
     pub fn encode(&self) -> Code {
-        let mut ret = self.rot;
-        ret |= self.sign << Self::ROT_BITS;
-        ret |= self.flip << (Self::SIGN_BITS + Self::ROT_BITS);
-        ret |= self.axis << (Self::FLIP_BITS + Self::SIGN_BITS + Self::ROT_BITS);
+        let mut b = 0;
+        let mut ret = 0;
+
+        ret |= self.flip << b;
+        b += Self::FLIP_BITS;
+
+        ret |= self.rot << b;
+        b += Self::ROT_BITS;
+
+        ret |= self.sign << b;
+        b += Self::SIGN_BITS;
+
+        ret |= self.axis << b;
         ret
     }
-    pub fn decode(code: Code) -> Self {
-        let rot = code & ((1 << Self::ROT_BITS) - 1);
-        let sign = (code >> Self::ROT_BITS) & ((1 << Self::SIGN_BITS) - 1);
-        let flip = (code >> (Self::SIGN_BITS + Self::ROT_BITS)) & ((1 << Self::FLIP_BITS) - 1);
-        let axis = (code >> (Self::FLIP_BITS + Self::SIGN_BITS + Self::ROT_BITS));
+    pub fn decode(mut code: Code) -> Self {
+        let mut a = 0;
+        let mut b = 0;
+
+        (a,b) = (b,Self::FLIP_BITS);
+        let flip = (code >> a) & ((1 << b) - 1);
+        code = (code >> a);
+
+        (a,b) = (b,Self::ROT_BITS);
+        let rot = (code >> a) & ((1 << b) - 1);
+        code = (code >> a);
+
+        (a,b) = (b,Self::SIGN_BITS);
+        let sign = (code >> a) & ((1 << b) - 1);
+        code = (code >> a);
+
+        (a,) = (b,);
+        let axis = (code >> a);
 
         Self {
             rot,
@@ -151,7 +175,7 @@ mod tests {
         for c in codes {
             let o = Orient::<CompressedData>::decode(c).uncompress();
             show(c, &o);
-            let m = o.to_matrix().to_homogeneous();
+            let m = o.to_matrix_without_flip().to_homogeneous();
             println!("{}", m);
         }
     }

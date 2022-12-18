@@ -62,7 +62,7 @@ pub const TEST_INSTANCES: &[CubeInstance] = &[
     },
     // -x 红
     CubeInstance {
-        info: [0, 0b000100, 0, 0],
+        info: [0, 0b001000, 0, 0],
         position: [0.0, 0.0, 0.0],
         color: [1.0, 0.01, 0.01],
     },
@@ -74,7 +74,7 @@ pub const TEST_INSTANCES: &[CubeInstance] = &[
     },
     // -y 绿
     CubeInstance {
-        info: [0, 0b010100, 0, 0],
+        info: [0, 0b011000, 0, 0],
         position: [0.0, 0.0, 0.0],
         color: [0.01, 1.0, 0.01],
     },
@@ -86,7 +86,7 @@ pub const TEST_INSTANCES: &[CubeInstance] = &[
     },
     // -z 蓝
     CubeInstance {
-        info: [0, 0b100100, 0, 0],
+        info: [0, 0b101000, 0, 0],
         position: [0.0, 0.0, 0.0],
         color: [0.01, 0.01, 1.0],
     },
@@ -148,7 +148,7 @@ impl CubeInstance {
 }
 impl VSInstance for CubeInstance {}
 
-const ORIENT_COUNT: usize = 48;
+const ORIENT_COUNT: usize = 24;
 type MATRIX = [[f32; 4]; 4];
 #[derive(Debug)]
 pub struct ConstResource {
@@ -161,8 +161,8 @@ impl ConstResource {
         let rot: MATRIX = Default::default();
         let mut rot_mat: [MATRIX; ORIENT_COUNT] = [rot; ORIENT_COUNT];
         for code in 0..ORIENT_COUNT as u8 {
-            let orint = Orient::<CompressedData>::decode(code).uncompress();
-            let mat = orint.to_matrix();
+            let orint = Orient::<CompressedData>::decode(code<<1).uncompress();
+            let mat = orint.to_matrix_without_flip();
             rot_mat[code as usize] = mat.to_homogeneous().into();
         }
         let paths = vec!["image/cube_test.png".to_string()];
