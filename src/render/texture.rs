@@ -19,7 +19,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::builder_set_fn};
+use crate::utils::builder_set_fn;
 
 use super::*;
 
@@ -82,8 +82,8 @@ impl TextureBind {
     fn get_entries_desc(&mut self) -> [BindGroupBuilderEntryDesc<'_>; 1] {
         let texture_desc = BindGroupBuilderEntryDesc {
             resource: BindingResource::TextureView(&self.view),
-            visibility: ShaderStages::FRAGMENT,
             count: None,
+            visibility: ShaderStages::FRAGMENT,
             ty: BindingType::Texture {
                 sample_type: TextureSampleType::Float { filterable: true },
                 view_dimension: TextureViewDimension::D2,
@@ -104,7 +104,6 @@ pub struct TextureBindBuilder<'a> {
     format: Option<TextureFormat>,
     usage: Option<TextureUsages>,
 }
-
 
 impl<'a> TextureBindBuilder<'a> {
     builder_set_fn!(set_device, device, &'a Device);

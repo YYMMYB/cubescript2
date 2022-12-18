@@ -4,14 +4,14 @@ use std::{
     io::Read,
     iter::once,
     mem::{replace, size_of},
-    num::{NonZeroU32, NonZeroU64},
+    num::{NonZeroU32, NonZeroU64, NonZeroI64},
     rc::Rc,
 };
 
 use anyhow::Result;
 use bytemuck::cast_slice;
 use cubescript2_macros::derive_desc;
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView, ImageBuffer, Pixel, Rgba};
 use memoffset::offset_of;
 use nalgebra::{Affine3, Isometry3, Matrix4, Perspective3, Point3, Projective3, Vector3};
 use once_cell::sync::OnceCell;
@@ -34,16 +34,16 @@ use super::super::*;
 // +x 面, 需要与 id 为 000000 的方向保持一直, orient 才能合理的表示方向.
 pub const TEST_VERTICES: &[CubeVertx] = &[
     CubeVertx {
-        position: [1.0, -1.0, -1.0],
+        position: [1.0, 1.0, 1.0],
         tex_coords: [0.0, 0.0],
     },
     CubeVertx {
         position: [1.0, -1.0, 1.0],
-        tex_coords: [0.0, 0.0],
+        tex_coords: [0.0, 1.0],
     },
     CubeVertx {
-        position: [1.0, 1.0, 1.0],
-        tex_coords: [1.0, 0.0],
+        position: [1.0, -1.0, -1.0],
+        tex_coords: [1.0, 1.0],
     },
     CubeVertx {
         position: [1.0, 1.0, -1.0],
@@ -56,49 +56,49 @@ pub const TEST_INDICES: &[u16] = &[2, 3, 0, 0, 1, 2];
 pub const TEST_INSTANCES: &[CubeInstance] = &[
     // 参考 黑
     CubeInstance {
-        info: [0, 0b100000, 0, 0],
-        position: [0.0, 0.0, -10.0],
-        color: [0.0, 0.0, 0.0],
-    },
-    // -x 红
-    CubeInstance {
-        info: [0, 0b000100, 0, 0],
-        position: [0.0, 0.0, 0.0],
-        color: [1.0, 0.01, 0.01],
-    },
-    // +x 红
-    CubeInstance {
         info: [0, 0b000000, 0, 0],
-        position: [0.0, 0.0, 0.0],
+        position: [0.0, 0.0, -4.0],
+        color: [1.0, 1.0, 1.0],
+    },
+    // // -x 红
+    // CubeInstance {
+    //     info: [0, 0b000100, 0, 0],
+    //     position: [0.0, 0.0, 0.0],
+    //     color: [1.0, 0.01, 0.01],
+    // },
+    // // +x 红
+    // CubeInstance {
+    //     info: [0, 0b000000, 0, 0],
+    //     position: [0.0, 0.0, 0.0],
 
-        color: [1.0, 0.01, 0.01],
-    },
-    // -y 绿
-    CubeInstance {
-        info: [0, 0b010100, 0, 0],
-        position: [0.0, 0.0, 0.0],
+    //     color: [1.0, 0.01, 0.01],
+    // },
+    // // -y 绿
+    // CubeInstance {
+    //     info: [0, 0b010100, 0, 0],
+    //     position: [0.0, 0.0, 0.0],
 
-        color: [0.01, 1.0, 0.01],
-    },
-    // +y 绿
-    CubeInstance {
-        info: [0, 0b010000, 0, 0],
-        position: [0.0, 0.0, 0.0],
+    //     color: [0.01, 1.0, 0.01],
+    // },
+    // // +y 绿
+    // CubeInstance {
+    //     info: [0, 0b010000, 0, 0],
+    //     position: [0.0, 0.0, 0.0],
 
-        color: [0.01, 1.0, 0.01],
-    },
-    // -z 蓝
-    CubeInstance {
-        info: [0, 0b100100, 0, 0],
-        position: [0.0, 0.0, 0.0],
-        color: [0.01, 0.01, 1.0],
-    },
-    // +z 蓝
-    CubeInstance {
-        info: [0, 0b100000, 0, 0],
-        position: [0.0, 0.0, 0.0],
-        color: [0.01, 0.01, 1.0],
-    },
+    //     color: [0.01, 1.0, 0.01],
+    // },
+    // // -z 蓝
+    // CubeInstance {
+    //     info: [0, 0b100100, 0, 0],
+    //     position: [0.0, 0.0, 0.0],
+    //     color: [0.01, 0.01, 1.0],
+    // },
+    // // +z 蓝
+    // CubeInstance {
+    //     info: [0, 0b100000, 0, 0],
+    //     position: [0.0, 0.0, 0.0],
+    //     color: [0.01, 0.01, 1.0],
+    // },
 ];
 
 #[repr(C)]
@@ -156,6 +156,7 @@ type MATRIX = [[f32; 4]; 4];
 #[derive(Debug)]
 pub struct ConstResource {
     pub rot_mat: [MATRIX; ORIENT_COUNT],
+    pub paths: Vec<String>,
 }
 
 impl ConstResource {
@@ -167,27 +168,143 @@ impl ConstResource {
             let mat = orint.to_matrix();
             rot_mat[code as usize] = mat.to_homogeneous().into();
         }
-        Self { rot_mat }
+        let paths = vec!["image/cube_test.png".to_string()];
+        Self { rot_mat, paths }
     }
-    pub fn create_bind(&self, device: &Device) -> ConstResourceBind {
+    pub fn create_bind(&self, device: &Device, queue: &Queue) -> Result<ConstResourceBind> {
         let rot_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Cube Resource Rot Matrix"),
             contents: cast_slice(&self.rot_mat),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
-        ConstResourceBind {
+        let format = TextureFormat::Rgba8UnormSrgb;
+        let len = self.paths.len();
+        let texture_array = {
+            let mip_len = 4;
+            let size = Extent3d {
+                width: 128,
+                height: 128,
+                depth_or_array_layers: len as u32,
+            };
+            let desc = TextureDescriptor {
+                label: Some("CubeTex"),
+                size,
+                mip_level_count: mip_len,
+                sample_count: 1u32,
+                dimension: TextureDimension::D2,
+                format: format,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            };
+            let tx = device.create_texture(&desc);
+
+            for i in 0..len {
+                println!("{}", self.paths[i]);
+                let img = image::open(&self.paths[i])?;
+                let mut mips = vec![img.to_rgba8()];
+                for mip_i in 1..mip_len {
+                    let width = size.width >> mip_i;
+                    let height = size.height >> mip_i;
+                    let mut mip = ImageBuffer::new(width, height);
+                    for x in 0..width {
+                        for y in 0..height {
+                            let mut sum = Rgba([0u8; 4]);
+                            for dx in 0..2 {
+                                for dy in 0..2 {
+                                    let p = mips[mip_i as usize - 1].get_pixel(x * 2, y * 2);
+                                    for c in 0..4 {
+                                        sum.0[c] += p[c]/4;
+                                    }
+                                }
+                            }
+                            mip.put_pixel(x, y, sum);
+                        }
+                    }
+                    mips.push(mip);
+                }
+
+                let mips: Vec<_> = mips.into_iter().map(|mip|{
+                    mip.into_raw()
+                }).collect();
+
+                for mip_i in 0..mip_len {
+                    let width = size.width >> mip_i;
+                    let height = size.height >> mip_i;
+                    let t = ImageCopyTexture {
+                        texture: &tx,
+                        mip_level: mip_i,
+                        origin: Origin3d {
+                            x: 0,
+                            y: 0,
+                            z: i as u32,
+                        },
+                        aspect: TextureAspect::All,
+                    };
+                    let data_lay = ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(
+                            NonZeroU32::new(format.pixel_size() as u32 * width).unwrap(),
+                        ),
+                        rows_per_image: None,
+                    };
+                    queue.write_texture(
+                        t,
+                        &mips[mip_i as usize][..],
+                        data_lay,
+                        Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                }
+            }
+            tx
+        };
+
+        let sampler = {
+            let desc = SamplerDescriptor {
+                label: Some("CubeTexSampler"),
+                address_mode_u: AddressMode::ClampToEdge,
+                address_mode_v: AddressMode::ClampToEdge,
+                address_mode_w: AddressMode::ClampToEdge,
+                mag_filter: FilterMode::Nearest,
+                min_filter: FilterMode::Linear,
+                mipmap_filter: FilterMode::Linear,
+                ..Default::default()
+            };
+            device.create_sampler(&desc)
+        };
+
+        let view = {
+            let desc = TextureViewDescriptor {
+                label: Some("CubeTexView"),
+                dimension: Some(TextureViewDimension::D2Array),
+                // base_array_layer: 0,
+                // array_layer_count: Some(NonZeroU32::new(len as u32).unwrap()),
+                ..Default::default()
+            };
+            texture_array.create_view(&desc)
+        };
+
+        Ok(ConstResourceBind {
             rot_mat: rot_buffer,
-        }
+            texture: texture_array,
+            array_view: view,
+            sampler: sampler,
+        })
     }
 }
 
 #[derive(Debug)]
 pub struct ConstResourceBind {
     pub rot_mat: Buffer,
+    pub texture: Texture,
+    pub array_view: TextureView,
+    pub sampler: Sampler,
 }
 
 impl ConstResourceBind {
-    pub fn get_entries_desc<'a>(&'a self) -> [BindGroupBuilderEntryDesc<'a>; 1] {
+    pub fn get_entries_desc<'a>(&'a self) -> [BindGroupBuilderEntryDesc<'a>; 3] {
         let rot_desc = BindGroupBuilderEntryDesc {
             resource: self.rot_mat.as_entire_binding(),
             visibility: ShaderStages::VERTEX,
@@ -198,7 +315,26 @@ impl ConstResourceBind {
                 min_binding_size: None,
             },
         };
-        [rot_desc]
+        let tex_desc = {
+            let ret = BindGroupBuilderEntryDesc {
+                resource: BindingResource::TextureView(&self.array_view),
+                count: None,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: true },
+                    view_dimension: TextureViewDimension::D2Array,
+                    multisampled: false,
+                },
+            };
+            ret
+        };
+        let sampler_desc = BindGroupBuilderEntryDesc {
+            resource: BindingResource::Sampler(&self.sampler),
+            visibility: ShaderStages::FRAGMENT,
+            count: None,
+            ty: BindingType::Sampler(SamplerBindingType::Filtering),
+        };
+        [rot_desc, sampler_desc, tex_desc]
     }
 
     pub fn write(&self, queue: &Queue, data: &ConstResource) {

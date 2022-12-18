@@ -13,6 +13,7 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
     @location(1) color: vec3<f32>,
+    @location(2) tex_idx: i32,
 };
 
 fn hsb2rgb(c: vec3<f32>) -> vec3<f32> {
@@ -54,37 +55,44 @@ fn vertex_main(
 ) -> VertexOutput {
     let info = get_info(instance.info);
     // instance 的旋转缩放
-    var s = exp2(f32(info.exp));
-    var pos = (s * model.position);
+    let s = exp2(f32(info.exp));
+    let pos = (s * model.position);
 
-    var pos4 = vec4<f32>(pos, 1.0);
+    let pos4 = vec4<f32>(pos, 1.0);
     let rot = rot_mat_array[info.rot_id];
-    pos4 = (rot * pos4);
-    pos = pos4.xyz;
-
-    // pos = pos + vec3<f32>(0.0, ttt, 0.0);
+    // let pos4 = (rot * pos4);
+    let pos = pos4.xyz;
 
     // instance 的位置
     var pos = pos + instance.position;
     // 相机 vp 矩阵
-    var vp = proj_mat * view_mat;
+    let vp = proj_mat * view_mat;
 
     var out: VertexOutput;
     out.clip_position = vp * vec4<f32>(pos, 1.0);
     out.tex_coords = model.tex_coords;
     out.color = instance.color;
+    out.tex_idx = 0;
     return out;
 }
 
 // Fragment shader
 
+@group(1) @binding(1)
+var tex_arr_samp : sampler;
+@group(1) @binding(2)
+var tex_arr: texture_2d_array<f32>;
+
 @fragment
 fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
+
     let color = hsb2rgb(vec3<f32>(in.tex_coords.x, 1.0, 1.0));
     let color = pow(color, 2.2 * vec3<f32>(1.0, 1.0, 1.0));
 
-    let color = in.color * color;
-    let color = vec4<f32>(color, 1.0);
+    let tx = textureSample(tex_arr, tex_arr_samp, in.tex_coords, in.tex_idx);
 
-    return color;
+    let color = in.color * color;
+    let color = vec4<f32>(color, 1.0) * tx ;
+
+    return tx;
 }

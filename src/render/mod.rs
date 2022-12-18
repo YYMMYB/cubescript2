@@ -130,7 +130,7 @@ impl RenderState {
 
         // bind group 开始 cube
         let cube_const_resource = cube::ConstResource::init();
-        let cube_const_resource_bind = cube_const_resource.create_bind(&device);
+        let cube_const_resource_bind = cube_const_resource.create_bind(&device, &queue)?;
         // cube_const_resource_bind.write(&queue, &cube_const_resource);
         let (lay, bg) = cube::build_bind_group(&device, &cube_const_resource_bind)?;
         // bind group 结束
