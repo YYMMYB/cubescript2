@@ -165,7 +165,7 @@ impl ConstResource {
             let mat = orint.to_matrix_without_flip();
             rot_mat[code as usize] = mat.to_homogeneous().into();
         }
-        let paths = vec!["image/cube_test.png".to_string()];
+        let paths = vec!["image/cube_test.png".to_string(),"image/cube_test_2.png".to_string()];
         Self { rot_mat, paths }
     }
     pub fn create_bind(&self, device: &Device, queue: &Queue) -> Result<ConstResourceBind> {
@@ -207,7 +207,7 @@ impl ConstResource {
                             let mut sum = Rgba([0u8; 4]);
                             for dx in 0..2 {
                                 for dy in 0..2 {
-                                    let p = mips[mip_i as usize - 1].get_pixel(x * 2, y * 2);
+                                    let p = mips[mip_i as usize - 1].get_pixel(x * 2+dx, y * 2+dy);
                                     for c in 0..4 {
                                         sum.0[c] += p[c]/4;
                                     }
@@ -215,6 +215,16 @@ impl ConstResource {
                             }
                             mip.put_pixel(x, y, sum);
                         }
+                    }
+                    // todo 测试代码, 记得删掉
+                    {
+                        let mut name = String::new();
+                        name.push_str("img_");
+                        name.push_str(i.to_string().as_str());
+                        name.push_str("_mip_");
+                        name.push_str(mip_i.to_string().as_str());
+                        name.push_str(".png");
+                        mip.save_with_format(name,image::ImageFormat::Png)?;
                     }
                     mips.push(mip);
                 }
