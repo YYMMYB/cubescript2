@@ -54,12 +54,12 @@ pub const TEST_VERTICES: &[CubeVertx] = &[
 pub const TEST_INDICES: &[u16] = &[2, 3, 0, 0, 1, 2];
 
 pub const TEST_INSTANCES: &[CubeInstance] = &[
-    // 参考 黑
-    CubeInstance {
-        info: [0, 0b000000, 0, 0],
-        position: [0.0, 0.0, -4.0],
-        color: [1.0, 1.0, 1.0],
-    },
+    // // 参考 黑
+    // CubeInstance {
+    //     info: [0, 0b000000, 0, 0],
+    //     position: [0.0, 0.0, -4.0],
+    //     color: [1.0, 1.0, 1.0],
+    // },
     // -x 红
     CubeInstance {
         info: [0, 0b001000, 0, 0],
@@ -126,9 +126,9 @@ impl VSVertex for CubeVertx {}
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct CubeInstance {
-    info: [u8; 4], // [指数(2的几次方, 缩放用), 旋转id(0..48), 贴图id与偏移0(低位), 贴图id与偏移1(高位)]
-    position: [f32; 3], // 先做info里的rotation_id, 再做这里的position
-    color: [f32; 3],
+    pub info: [u8; 4], // [指数(2的几次方, 缩放用), 旋转id(0..48), 贴图id与偏移0(低位), 贴图id与偏移1(高位)]
+    pub position: [f32; 3], // 先做info里的rotation_id, 再做这里的position
+    pub color: [f32; 3],
 }
 
 impl CubeInstance {
@@ -217,15 +217,15 @@ impl ConstResource {
                         }
                     }
                     // todo 测试代码, 记得删掉
-                    {
-                        let mut name = String::new();
-                        name.push_str("img_");
-                        name.push_str(i.to_string().as_str());
-                        name.push_str("_mip_");
-                        name.push_str(mip_i.to_string().as_str());
-                        name.push_str(".png");
-                        mip.save_with_format(name,image::ImageFormat::Png)?;
-                    }
+                    // {
+                    //     let mut name = String::new();
+                    //     name.push_str("img_");
+                    //     name.push_str(i.to_string().as_str());
+                    //     name.push_str("_mip_");
+                    //     name.push_str(mip_i.to_string().as_str());
+                    //     name.push_str(".png");
+                    //     mip.save_with_format(name,image::ImageFormat::Png)?;
+                    // }
                     mips.push(mip);
                 }
 

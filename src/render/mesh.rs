@@ -24,7 +24,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::*};
+use crate::utils::*;
 
 use super::*;
 
@@ -36,8 +36,8 @@ type VertexAttributeLayoutOwnerId = u64;
 #[derive(Debug)]
 pub struct MeshManager {
     pub attr_lay_set: HashMap<VertexAttributeLayoutOwnerId, VertexAttributeLayoutOwner>,
-    pub cube_mesh: Mesh<cube::CubeVertx, cube::CubeInstance>,
-    pub cube_mesh_bind: MeshBind,
+    pub cube_meshs: Vec<Mesh<cube::CubeVertx, cube::CubeInstance>>,
+    pub cube_mesh_binds: Vec<MeshBind>,
 }
 
 impl MeshManager {
@@ -58,25 +58,47 @@ impl MeshManager {
         };
         layout_set.insert(hi, i_lay);
 
-        let cube_mesh = Mesh::<cube::CubeVertx, cube::CubeInstance> {
-            vert: cube::TEST_VERTICES.into(),
-            indices: cube::TEST_INDICES.into(),
-            instance: cube::TEST_INSTANCES.into(),
-            vertex_layout_id: hv,
-            instance_layout_id: hi,
-            index_format: IndexFormat::Uint16,
-        };
-        let mut builder = MeshBindBuilder::<cube::CubeVertx, cube::CubeInstance>::default();
-        builder
-            .set_device(device)
-            .set_label("Cube")
-            .set_mesh(&cube_mesh);
-        let cube_mesh_bind = builder.build()?;
+        let mut cube_meshs = Vec::new();
+        let mut cube_mesh_binds = Vec::new();
+        const N: i32 = 5;
+        for x in -N..N {
+            for y in -N..N {
+                for z in -N..N {
+                    let inss : Vec<_> = cube::TEST_INSTANCES.iter().map(|ins|{
+                        let mut ins = ins.clone();
+                        let p = ins.position;
+                        ins.position = [
+                            p[0] + x as f32 * 3f32,
+                            p[1] + y as f32 * 3f32,
+                            p[2] + z as f32 * 3f32,
+                        ];
+                        ins
+                    }).collect();
+                    let cube_mesh = Mesh::<cube::CubeVertx, cube::CubeInstance> {
+                        vert: cube::TEST_VERTICES.into(),
+                        indices: cube::TEST_INDICES.into(),
+                        instance: inss.into(),
+                        vertex_layout_id: hv,
+                        instance_layout_id: hi,
+                        index_format: IndexFormat::Uint16,
+                    };
+                    let mut builder =
+                        MeshBindBuilder::<cube::CubeVertx, cube::CubeInstance>::default();
+                    builder
+                        .set_device(device)
+                        .set_label("Cube")
+                        .set_mesh(&cube_mesh);
+                    let cube_mesh_bind = builder.build()?;
+                    cube_meshs.push(cube_mesh);
+                    cube_mesh_binds.push(cube_mesh_bind);
+                }
+            }
+        }
 
         Ok(MeshManager {
             attr_lay_set: layout_set,
-            cube_mesh,
-            cube_mesh_bind,
+            cube_meshs,
+            cube_mesh_binds,
         })
     }
 }

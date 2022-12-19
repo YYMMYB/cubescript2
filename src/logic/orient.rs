@@ -27,6 +27,7 @@ impl Orient<Data> {
         }
     }
 
+    // 可以移植到shader里, 就不用传入24个矩阵了.
     // 注意是 3x3 的矩阵, 而非 4x4 的. 因为没有位移
     pub fn to_matrix_without_flip(&self) -> Matrix3<f32> {
         // axis0 代表 norm 的方向, 实现上是把原 正x轴 映射到 axis0 * sign

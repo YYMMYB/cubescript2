@@ -73,7 +73,7 @@ fn vertex_main(
     out.clip_position = vp * vec4<f32>(pos, 1.0);
     out.tex_coords = model.tex_coords;
     out.color = instance.color;
-    out.tex_idx = 0;
+    out.tex_idx = 1;
 
     let flip = f32(info.rot_flip & 1u);
     out.tex_coords.x = flip + (1f - flip * 2f) * out.tex_coords.x;

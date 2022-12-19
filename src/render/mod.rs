@@ -152,8 +152,8 @@ impl RenderState {
         let cube_pipeline = {
             let mut builder = PipelineBuilder::new();
             let (v_lay, i_lay) = {
-                let vid = &mesh_manager.cube_mesh.vertex_layout_id;
-                let iid = &mesh_manager.cube_mesh.instance_layout_id;
+                let vid = &mesh_manager.cube_meshs[0].vertex_layout_id;
+                let iid = &mesh_manager.cube_meshs[0].instance_layout_id;
                 let v = mesh_manager
                     .attr_lay_set
                     .get(vid)
@@ -236,20 +236,26 @@ impl RenderState {
                 };
                 encoder.begin_render_pass(&desc)
             };
-            let cube_bind = &self.mesh_manager.cube_mesh_bind;
-            let cube_mesh = &self.mesh_manager.cube_mesh;
-            let index_len = cube_mesh.indices.len() as u32;
-            let mut instance_len = cube_mesh.instance.len() as u32;
-            if instance_len < 1 {
-                instance_len = 1;
-            }
+
             render_pass.set_pipeline(&self.cube_pipeline);
             render_pass.set_bind_group(0, &self.bind_groups[0], &[]);
             render_pass.set_bind_group(1, &self.bind_groups[1], &[]);
+
+            let cube_bind = &self.mesh_manager.cube_mesh_binds[0];
+            let cube_mesh = &self.mesh_manager.cube_meshs[0];
             render_pass.set_vertex_buffer(0, cube_bind.vertex_bind.slice(..));
-            render_pass.set_vertex_buffer(1, cube_bind.instance_bind.slice(..));
             render_pass.set_index_buffer(cube_bind.index_bind.slice(..), cube_mesh.index_format);
-            render_pass.draw_indexed(0..index_len, 0, 0..instance_len);
+            for i in 0..self.mesh_manager.cube_mesh_binds.len() {
+                let cube_bind = &self.mesh_manager.cube_mesh_binds[i];
+                let cube_mesh = &self.mesh_manager.cube_meshs[i];
+                let index_len = cube_mesh.indices.len() as u32;
+                let mut instance_len = cube_mesh.instance.len() as u32;
+                if instance_len < 1 {
+                    instance_len = 1;
+                }
+                render_pass.set_vertex_buffer(1, cube_bind.instance_bind.slice(..));
+                render_pass.draw_indexed(0..index_len, 0, 0..instance_len);
+            }
         }
         let command_buffer = encoder.finish();
         self.queue.submit(once(command_buffer));
