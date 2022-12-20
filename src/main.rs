@@ -6,10 +6,10 @@ fn main() {
         match run().await {
             Ok(_) => {
                 println!("Success!");
-            },
+            }
             Err(err) => {
                 println!("{:?}", err);
-            },
+            }
         }
     };
 
