@@ -57,84 +57,6 @@ impl TextureBind {
         };
         Ok(queue.write_texture(texture, &data[..], data_layout, size))
     }
-
-    fn get_entries_desc(&mut self) -> [BindGroupBuilderEntryDesc<'_>; 1] {
-        let texture_desc = BindGroupBuilderEntryDesc {
-            resource: BindingResource::TextureView(&self.view),
-            count: None,
-            visibility: ShaderStages::FRAGMENT,
-            ty: BindingType::Texture {
-                sample_type: TextureSampleType::Float { filterable: true },
-                view_dimension: TextureViewDimension::D2,
-                multisampled: false,
-            },
-        };
-        [texture_desc]
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct TextureBindBuilder<'a> {
-    device: Option<&'a Device>,
-    label: Option<&'a str>,
-    width: Option<u32>,
-    height: Option<u32>,
-    z: Option<u32>,
-    format: Option<TextureFormat>,
-    usage: Option<TextureUsages>,
-}
-
-impl<'a> TextureBindBuilder<'a> {
-    builder_set_fn!(set_device, device, &'a Device);
-    builder_set_fn!(set_label, label, &'a str);
-    builder_set_fn!(set_width, width, u32);
-    builder_set_fn!(set_height, height, u32);
-    builder_set_fn!(set_z, z, u32);
-    builder_set_fn!(set_format, format, TextureFormat);
-    builder_set_fn!(set_usage, usage, TextureUsages);
-
-    pub fn set_size_by_image(&mut self, image: &Image) -> &mut Self {
-        self.width = Some(image.width);
-        self.height = Some(image.height);
-        self.height = Some(1);
-        self
-    }
-
-    pub fn build(mut self) -> Result<TextureBind> {
-        let device = self.device.ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
-        let label = &self.label;
-
-        let size = Extent3d {
-            width: self.width.ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
-            height: self.height.ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
-            depth_or_array_layers: self.z.unwrap_or(1),
-        };
-
-        let texture = {
-            let label = get_default_label(label, [TEXTURE_LABEL]);
-            let desc = TextureDescriptor {
-                label: label.as_deref(),
-                size: size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: self.format.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
-                usage: self.usage.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
-            };
-            device.create_texture(&desc)
-        };
-
-        let view = {
-            let label = get_default_label(label, [TEXTURE_VIEW_LABEL]);
-            let desc = TextureViewDescriptor {
-                label: label.as_deref(),
-                ..Default::default()
-            };
-            texture.create_view(&desc)
-        };
-
-        Ok(TextureBind { texture, view })
-    }
 }
 
 pub struct TextureArgs {
@@ -190,7 +112,3 @@ impl TextureArgs {
         }
     }
 }
-
-
-
-const BUILDER_FIELD_UNSET: &'static str = "builder 必须字段未被设置";

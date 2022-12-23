@@ -281,56 +281,9 @@ impl ConstResourceBind {
             BindingResource::TextureView(&self.array_view),
         ])
     }
-    pub fn get_entries_desc<'a>(&'a self) -> [BindGroupBuilderEntryDesc<'a>; 3] {
-        let rot_desc = BindGroupBuilderEntryDesc {
-            resource: self.rot_mat.as_entire_binding(),
-            visibility: ShaderStages::VERTEX,
-            count: None,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-        };
-        let tex_desc = {
-            let ret = BindGroupBuilderEntryDesc {
-                resource: BindingResource::TextureView(&self.array_view),
-                count: None,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: true },
-                    view_dimension: TextureViewDimension::D2Array,
-                    multisampled: false,
-                },
-            };
-            ret
-        };
-        let sampler_desc = BindGroupBuilderEntryDesc {
-            resource: BindingResource::Sampler(&self.sampler),
-            visibility: ShaderStages::FRAGMENT,
-            count: None,
-            ty: BindingType::Sampler(SamplerBindingType::Filtering),
-        };
-        [rot_desc, sampler_desc, tex_desc]
-    }
-
     pub fn write(&self, queue: &Queue, data: &ConstResource) {
         queue.write_buffer(&self.rot_mat, 0, cast_slice(&data.rot_mat));
     }
-}
-
-pub fn build_bind_group(
-    device: &Device,
-    const_resource_bind: &ConstResourceBind,
-) -> Result<(BindGroupLayout, BindGroup)> {
-    let mut builder = BindGroupBuider::default();
-    let descs = const_resource_bind.get_entries_desc();
-    builder
-        .set_device(device)
-        .set_label("Cube")
-        .push_entries(descs);
-    let (layout, group) = builder.build()?;
-    Ok((layout, group))
 }
 
 pub struct PipelinePreparer {

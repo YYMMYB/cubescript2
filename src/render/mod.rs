@@ -85,8 +85,6 @@ impl RenderState {
 
         // 后面是渲染相关了
 
-        let clear_color = Color::GREEN;
-
         // surface 配置, 窗口 resize 用
         let surface_config = {
             let size = window.inner_size();
@@ -104,21 +102,16 @@ impl RenderState {
         let mut bind_groups = Vec::new();
 
         // bind group 开始 几乎每帧更新, 且通用
-        let mut group_bd = BindGroupBuider::default();
-        group_bd.set_device(&device).set_label("Per Frame");
 
         // 相机 bind, 并增加到 bind group.
-        let mut builder = CameraBindBuilder::default();
-        builder
-            .set_device(&device)
-            .set_camera(&camera)
-            .set_label("Main");
-        let camera_bind = builder.build()?;
-        let camera_entries = camera_bind.get_entries_desc();
-
-        // bind group 结束
-        group_bd.push_entries(camera_entries);
-        let (lay, bg) = group_bd.build()?;
+        let mut camera_bind = camera.create_binding(&device);
+        let camera_res = camera_bind.get_bind_resource();
+        let lay = create_bind_group_layout(
+            &device,
+            Some("Camera Bind Group Layout"),
+            &Camera::get_layout_args(),
+        )?;
+        let bg = create_bind_group(&device, Some("Camera Bind Group"), &lay, &camera_res)?;
         bind_group_layouts.push(lay);
         bind_groups.push(bg);
 
@@ -169,7 +162,6 @@ impl RenderState {
         };
         let main_surface_view = texture.texture.create_view(&Default::default());
 
-        // 这里
         {
             let mut rp = self.cube_pipeline.start_pass(
                 &mut encoder,
@@ -180,9 +172,8 @@ impl RenderState {
             for i in 0..self.mesh_manager.cube_mesh_binds.len() {
                 let bind = &self.mesh_manager.cube_mesh_binds[i];
                 let instance_len = self.mesh_manager.cube_meshs[i].instance.len() as u32;
-                let mref = &mut rp;
                 self.cube_pipeline
-                    .draw(mref, &bind.instance_bind, instance_len);
+                    .draw(&mut rp, &bind.instance_bind, instance_len);
             }
         }
 
@@ -197,27 +188,21 @@ impl RenderState {
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
         camera.aspect = width as f32 / height as f32;
-        self.depth_texture_bind = create_depth_texture_bind(&self.device, &self.surface_config)?;
+        let mut desc = TextureArgs::depth_texture();
+        desc.width = self.surface_config.width;
+        desc.height = self.surface_config.height;
+        let tx = self
+            .device
+            .create_texture(&desc.into_desc(Some("Depth Texture (resized)")));
+        self.depth_texture_bind = TextureBind {
+            view: tx.create_view(&TextureViewDescriptor::default()),
+            texture: tx,
+        };
         Ok(())
     }
 }
 
 pub fn ttt<'a, 'b>(p: &'b cube::Pipeline, rp: &'b mut RenderPass<'a>) {}
-
-fn create_depth_texture_bind(
-    device: &Device,
-    surface_config: &SurfaceConfiguration,
-) -> Result<TextureBind> {
-    let mut builder = TextureBindBuilder::default();
-    builder
-        .set_device(device)
-        .set_label("Depth")
-        .set_format(TextureFormat::Depth32Float)
-        .set_width(surface_config.width)
-        .set_height(surface_config.height)
-        .set_usage(TextureUsages::RENDER_ATTACHMENT);
-    builder.build()
-}
 
 impl RenderState {
     fn get_default_main_surface_config(

@@ -8,7 +8,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::builder_set_fn};
+use crate::utils::builder_set_fn;
 
 use super::*;
 
@@ -69,34 +69,30 @@ impl Camera {
         self.calculate_view();
         self.calculate_proj();
     }
-}
 
-#[derive(Debug)]
-pub struct CameraBind {
-    pub view_buffer: Buffer,
-    pub proj_buffer: Buffer,
-}
+    pub fn create_binding(&self, device: &Device) -> CameraBind {
+        let v: [[f32; 4]; 4] = self.view_matrix.clone().into();
+        let p: [[f32; 4]; 4] = self.proj_matrix.clone().into();
+        let view_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("View Matrix"),
+            contents: bytemuck::cast_slice(&v),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
-impl CameraBind {
-    pub fn write(&self, queue: &mut Queue, camera: &Camera) {
-        let v:[[f32;4];4]= camera.view_matrix.clone().into();
-        let p:[[f32;4];4]= camera.proj_matrix.clone().into();
-        queue.write_buffer(
-            &self.view_buffer,
-            0,
-            bytemuck::cast_slice(&v),
-        );
-        queue.write_buffer(
-            &self.proj_buffer,
-            0,
-            bytemuck::cast_slice(&p),
-        );
+        let proj_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Proj Matrix"),
+            contents: bytemuck::cast_slice(&p),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        CameraBind {
+            view_buffer,
+            proj_buffer,
+        }
     }
 
-    pub fn get_entries_desc(&self) -> [BindGroupBuilderEntryDesc; 2] {
-        let view_buffer = &self.view_buffer;
-        let view_desc = BindGroupBuilderEntryDesc {
-            resource: view_buffer.as_entire_binding(),
+    pub fn get_layout_args() -> [BindGroupLayoutEntryArgs; 2] {
+        let view_desc = BindGroupLayoutEntryArgs {
             visibility: wgpu::ShaderStages::VERTEX,
             count: None,
             ty: wgpu::BindingType::Buffer {
@@ -106,9 +102,7 @@ impl CameraBind {
             },
         };
 
-        let proj_buffer = &self.proj_buffer;
-        let proj_desc = BindGroupBuilderEntryDesc {
-            resource: proj_buffer.as_entire_binding(),
+        let proj_desc = BindGroupLayoutEntryArgs {
             visibility: wgpu::ShaderStages::VERTEX,
             count: None,
             ty: wgpu::BindingType::Buffer {
@@ -121,47 +115,24 @@ impl CameraBind {
     }
 }
 
-#[derive(Default, Debug)]
-pub struct CameraBindBuilder<'a> {
-    camera: Option<&'a Camera>,
-    device: Option<&'a Device>,
-    label: Option<&'a str>,
+#[derive(Debug)]
+pub struct CameraBind {
+    pub view_buffer: Buffer,
+    pub proj_buffer: Buffer,
 }
 
-impl<'d> CameraBindBuilder<'d> {
-    pub const VIEW_LABEL: &'static str = " View Matrix4";
-    pub const PROJ_LABEL: &'static str = " Proj Matrix4";
+impl CameraBind {
+    pub fn write(&self, queue: &mut Queue, camera: &Camera) {
+        let v: [[f32; 4]; 4] = camera.view_matrix.clone().into();
+        let p: [[f32; 4]; 4] = camera.proj_matrix.clone().into();
+        queue.write_buffer(&self.view_buffer, 0, bytemuck::cast_slice(&v));
+        queue.write_buffer(&self.proj_buffer, 0, bytemuck::cast_slice(&p));
+    }
 
-    builder_set_fn!(set_camera, camera, &'d Camera);
-    builder_set_fn!(set_device, device, &'d Device);
-    builder_set_fn!(set_label, label, &'d str);
-
-    pub fn build(mut self) -> Result<CameraBind> {
-        let device = self.device.ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
-        let camera = self.camera.ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
-
-        let view_buffer_label = get_default_label(&self.label, [Self::VIEW_LABEL, BUFFER_LABEL]);
-        let proj_buffer_label = get_default_label(&self.label, [Self::PROJ_LABEL, BUFFER_LABEL]);
-
-        let v:[[f32;4];4]= camera.view_matrix.clone().into();
-        let p:[[f32;4];4]= camera.proj_matrix.clone().into();
-        let view_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: view_buffer_label.as_deref(),
-            contents: bytemuck::cast_slice(&v),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let proj_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: proj_buffer_label.as_deref(),
-            contents: bytemuck::cast_slice(&p),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        Ok(CameraBind {
-            view_buffer,
-            proj_buffer,
-        })
+    pub fn get_bind_resource(&self) -> [BindingResource; 2] {
+        [
+            self.view_buffer.as_entire_binding(),
+            self.proj_buffer.as_entire_binding(),
+        ]
     }
 }
-
-const BUILDER_FIELD_UNSET: &'static str = "builder 必须字段未被设置";
