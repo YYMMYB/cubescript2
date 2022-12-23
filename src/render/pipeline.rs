@@ -22,7 +22,6 @@ use crate::utils::*;
 
 use super::*;
 
-
 pub struct BindGroupLayoutEntryArgs {
     pub count: Option<NonZeroU32>,
     pub visibility: ShaderStages,
@@ -102,14 +101,25 @@ pub fn create_pipeline_layout<'a>(
     Ok(layout)
 }
 
-pub fn create_buffer<T>(device: &Device, label: Option<&str>, usage:BufferUsages,contents:&[T]) -> Buffer
-where T:bytemuck::Pod
+pub fn create_buffer<T>(
+    device: &Device,
+    label: Option<&str>,
+    usage: BufferUsages,
+    contents: &[T],
+) -> Buffer
+where
+    T: bytemuck::Pod,
 {
-    device.create_buffer_init(&BufferInitDescriptor{
+    device.create_buffer_init(&BufferInitDescriptor {
         label,
         contents: bytemuck::cast_slice(contents),
         usage,
     })
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct VertexAttributeLayoutOwner {
+    pub attributes: Vec<VertexAttribute>,
 }
 
 const BUILDER_FIELD_UNSET: &'static str = "builder 必须字段未被设置";

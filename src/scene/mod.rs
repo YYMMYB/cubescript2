@@ -1,6 +1,9 @@
-use crate::render::{built_in::cube, RenderState};
+use std::time::Instant;
+
+use crate::render::{built_in::cube, camera::Camera, RenderState};
 use anyhow::*;
 use nalgebra::Vector3;
+use winit::window::Window;
 
 pub struct Scene {
     pub cubes: cube::Mesh,

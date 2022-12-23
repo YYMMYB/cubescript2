@@ -23,14 +23,10 @@ use crate::{scene::Scene, utils::builder_set_fn};
 
 pub mod built_in;
 pub mod camera;
-pub mod label;
-pub mod mesh;
 pub mod pipeline;
 pub mod texture;
 use built_in::*;
 use camera::*;
-use label::*;
-use mesh::*;
 use pipeline::*;
 use texture::*;
 
@@ -46,8 +42,6 @@ pub struct RenderState {
     pub depth_texture_bind: TextureBind,
 
     pub cube_pipeline: cube::Pipeline,
-
-    pub mesh_manager: MeshManager,
 }
 
 impl RenderState {
@@ -93,9 +87,6 @@ impl RenderState {
             surface.configure(&device, &con);
             con
         };
-
-        // Mesh Manager
-        let mesh_manager = MeshManager::init(&device)?;
 
         // 存所有的 bind group, bind group layout
         let mut bind_group_layouts = Vec::new();
@@ -145,7 +136,6 @@ impl RenderState {
             camera_bind,
             bind_groups,
             depth_texture_bind,
-            mesh_manager,
         };
         Ok(ret)
     }
@@ -218,5 +208,6 @@ impl RenderState {
         con
     }
 }
+
 
 const EMPTY_KEY: &'static str = "Key 不存在于字典中";

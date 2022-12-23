@@ -123,7 +123,6 @@ impl CubeVertx {
         vertex_buffer_layout!(CubeVertx, Vertex, &attr_lay.attributes[..])
     }
 }
-impl VSVertex for CubeVertx {}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Default)]
@@ -148,7 +147,6 @@ impl CubeInstance {
         vertex_buffer_layout!(CubeInstance, Instance, &attr_lay.attributes[..])
     }
 }
-impl VSInstance for CubeInstance {}
 
 const ORIENT_COUNT: usize = 24;
 type MATRIX = [[f32; 4]; 4];
