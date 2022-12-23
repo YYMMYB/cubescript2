@@ -13,7 +13,6 @@ use std::{
 };
 
 use anyhow::*;
-use cubescript2_macros::derive_desc;
 use image::DynamicImage;
 use memoffset::offset_of;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Projective3, Vector3};

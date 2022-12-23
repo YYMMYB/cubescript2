@@ -1,4 +1,3 @@
-
 use std::{
     fs::File,
     io::Read,
@@ -9,7 +8,6 @@ use std::{
 };
 
 use anyhow::*;
-use cubescript2_macros::derive_desc;
 use image::DynamicImage;
 use memoffset::offset_of;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Projective3, Vector3};
@@ -20,10 +18,9 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{utils::*};
+use crate::utils::*;
 
 use super::*;
-
 
 #[derive(Clone, Debug, Default)]
 pub struct PipelineBuilder<'d> {
@@ -82,9 +79,18 @@ impl<'d> PipelineBuilder<'d> {
         let vs_path = self.vs_path.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
         let fs_path = self.fs_path.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
         let label = get_default_label(&self.label, [PIPELINE_LABEL]);
-        let vertex_buffer = self.vertex_buffer.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
-        let depth_format = self.depth_format.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
-        let depth_write = self.depth_write.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let vertex_buffer = self
+            .vertex_buffer
+            .take()
+            .ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let depth_format = self
+            .depth_format
+            .take()
+            .ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let depth_write = self
+            .depth_write
+            .take()
+            .ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
 
         let vs = {
             let mut f = File::open(vs_path)?;
@@ -225,6 +231,95 @@ impl<'a> BindGroupBuider<'a> {
         };
         Ok((layout, bind_group))
     }
+}
+
+pub struct BindGroupLayoutEntryArgs {
+    pub count: Option<NonZeroU32>,
+    pub visibility: ShaderStages,
+    pub ty: BindingType,
+}
+pub fn create_bind_group_layout<'a, A>(
+    device: &'a Device,
+    label: Option<&'a str>,
+    args: A,
+) -> Result<BindGroupLayout>
+where
+    A: IntoIterator<Item = &'a BindGroupLayoutEntryArgs>,
+{
+    let mut entries = Vec::new();
+    let mut i = 0;
+    for arg in args {
+        entries.push(BindGroupLayoutEntry {
+            binding: i,
+            visibility: arg.visibility,
+            ty: arg.ty,
+            count: arg.count,
+        });
+        i += 1;
+    }
+    let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: label,
+        entries: &entries[..],
+    });
+    Ok(layout)
+}
+
+pub fn create_bind_group<'a, A>(
+    device: &'a Device,
+    label: Option<&'a str>,
+    layout: &'a BindGroupLayout,
+    args: A,
+) -> Result<BindGroup>
+where
+    A: IntoIterator<Item = &'a BindingResource<'a>>,
+{
+    let mut entries = Vec::new();
+    let mut i = 0;
+    for arg in args {
+        entries.push(BindGroupEntry {
+            binding: i,
+            resource: arg.clone(),
+        });
+        i += 1;
+    }
+    let group = device.create_bind_group(&BindGroupDescriptor {
+        label,
+        layout,
+        entries: &entries[..],
+    });
+    Ok(group)
+}
+
+pub fn create_shader_module(
+    device: &Device,
+    label: Option<&str>,
+    source: ShaderSource,
+) -> Result<ShaderModule> {
+    Ok(device.create_shader_module(ShaderModuleDescriptor { label, source }))
+}
+
+pub fn create_pipeline_layout<'a>(
+    device: &'a Device,
+    label: Option<&'a str>,
+    group_layouts: impl IntoIterator<Item = &'a BindGroupLayout>,
+) -> Result<PipelineLayout> {
+    let group_layouts = Vec::from_iter(group_layouts);
+    let layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label,
+        bind_group_layouts: &group_layouts[..],
+        push_constant_ranges: &[],
+    });
+    Ok(layout)
+}
+
+pub fn create_buffer<T>(device: &Device, label: Option<&str>, usage:BufferUsages,contents:&[T]) -> Buffer
+where T:bytemuck::Pod
+{
+    device.create_buffer_init(&BufferInitDescriptor{
+        label,
+        contents: bytemuck::cast_slice(contents),
+        usage,
+    })
 }
 
 const BUILDER_FIELD_UNSET: &'static str = "builder 必须字段未被设置";

@@ -1,0 +1,196 @@
+use std::{
+    fs::File,
+    io::Read,
+    iter::once,
+    mem::{replace, size_of},
+    num::NonZeroU32,
+    rc::Rc,
+};
+
+use anyhow::*;
+use image::DynamicImage;
+use memoffset::offset_of;
+use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Projective3, Vector3};
+use once_cell::sync::OnceCell;
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    *,
+};
+use winit::window::Window;
+
+use crate::{ utils::builder_set_fn};
+use resource::*;
+
+use self::format_info::TextureFormatPixelInfo;
+
+use super::*;
+
+pub mod format_info;
+
+#[derive(Debug)]
+pub struct TextureBind {
+    pub texture: wgpu::Texture,
+    pub view: TextureView,
+}
+
+impl TextureBind {
+    pub fn write(&self, queue: &Queue, image: &Image) -> Result<()> {
+        let data = &image.data;
+        let size = Extent3d {
+            width: image.width,
+            height: image.height,
+            depth_or_array_layers: 1,
+        };
+        let pixel_size = image.format.pixel_size();
+        let data_layout = ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(
+                NonZeroU32::new(pixel_size as u32 * size.width).ok_or(anyhow!("需要非0数字"))?,
+            ),
+            rows_per_image: Some(NonZeroU32::new(size.height).ok_or(anyhow!("需要非0数字"))?),
+        };
+        let texture = ImageCopyTexture {
+            texture: &self.texture,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: TextureAspect::All,
+        };
+        Ok(queue.write_texture(texture, &data[..], data_layout, size))
+    }
+
+    fn get_entries_desc(&mut self) -> [BindGroupBuilderEntryDesc<'_>; 1] {
+        let texture_desc = BindGroupBuilderEntryDesc {
+            resource: BindingResource::TextureView(&self.view),
+            count: None,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Texture {
+                sample_type: TextureSampleType::Float { filterable: true },
+                view_dimension: TextureViewDimension::D2,
+                multisampled: false,
+            },
+        };
+        [texture_desc]
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct TextureBindBuilder<'a> {
+    device: Option<&'a Device>,
+    label: Option<&'a str>,
+    width: Option<u32>,
+    height: Option<u32>,
+    z: Option<u32>,
+    format: Option<TextureFormat>,
+    usage: Option<TextureUsages>,
+}
+
+impl<'a> TextureBindBuilder<'a> {
+    builder_set_fn!(set_device, device, &'a Device);
+    builder_set_fn!(set_label, label, &'a str);
+    builder_set_fn!(set_width, width, u32);
+    builder_set_fn!(set_height, height, u32);
+    builder_set_fn!(set_z, z, u32);
+    builder_set_fn!(set_format, format, TextureFormat);
+    builder_set_fn!(set_usage, usage, TextureUsages);
+
+    pub fn set_size_by_image(&mut self, image: &Image) -> &mut Self {
+        self.width = Some(image.width);
+        self.height = Some(image.height);
+        self.height = Some(1);
+        self
+    }
+
+    pub fn build(mut self) -> Result<TextureBind> {
+        let device = self.device.ok_or(anyhow!(BUILDER_FIELD_UNSET))?;
+        let label = &self.label;
+
+        let size = Extent3d {
+            width: self.width.ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
+            height: self.height.ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
+            depth_or_array_layers: self.z.unwrap_or(1),
+        };
+
+        let texture = {
+            let label = get_default_label(label, [TEXTURE_LABEL]);
+            let desc = TextureDescriptor {
+                label: label.as_deref(),
+                size: size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: self.format.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
+                usage: self.usage.take().ok_or(anyhow!(BUILDER_FIELD_UNSET))?,
+            };
+            device.create_texture(&desc)
+        };
+
+        let view = {
+            let label = get_default_label(label, [TEXTURE_VIEW_LABEL]);
+            let desc = TextureViewDescriptor {
+                label: label.as_deref(),
+                ..Default::default()
+            };
+            texture.create_view(&desc)
+        };
+
+        Ok(TextureBind { texture, view })
+    }
+}
+
+pub struct TextureArgs {
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+    pub mip_level_count: u32,
+    pub sample_count: u32,
+    pub dimension: TextureDimension,
+    pub format: TextureFormat,
+    pub usage: TextureUsages,
+}
+impl TextureArgs {
+    pub fn depth_texture() -> TextureArgs {
+        TextureArgs {
+            width: 0,
+            height: 0,
+            depth: 1,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Depth32Float,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+        }
+    }
+
+    pub fn texture_array() -> TextureArgs {
+        TextureArgs {
+            width: 0,
+            height: 0,
+            depth: 0,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+        }
+    }
+
+    pub fn into_desc(self, label: Option<&str>) -> TextureDescriptor {
+        TextureDescriptor {
+            label,
+            size: Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: self.depth,
+            },
+            mip_level_count: self.mip_level_count,
+            sample_count: self.sample_count,
+            dimension: self.dimension,
+            format: self.format,
+            usage: self.usage,
+        }
+    }
+}
+
+
+
+const BUILDER_FIELD_UNSET: &'static str = "builder 必须字段未被设置";

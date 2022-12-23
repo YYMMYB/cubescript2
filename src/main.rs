@@ -1,3 +1,5 @@
+use std::fs::File;
+
 use cubescript2::{render::*, window::run};
 fn main() {
     env_logger::init();
@@ -8,7 +10,7 @@ fn main() {
                 println!("Success!");
             }
             Err(err) => {
-                println!("{:?}", err);
+                println!("Main {:?}\n{:}", err.chain().collect::<Vec<_>>(), err.backtrace());
             }
         }
     };

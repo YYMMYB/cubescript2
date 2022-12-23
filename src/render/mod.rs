@@ -9,7 +9,6 @@ use std::{
 };
 
 use anyhow::*;
-use cubescript2_macros::derive_desc;
 use image::DynamicImage;
 use memoffset::offset_of;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Projective3, Vector3};
@@ -27,14 +26,12 @@ pub mod camera;
 pub mod label;
 pub mod mesh;
 pub mod pipeline;
-pub mod scene;
 pub mod texture;
 use built_in::*;
 use camera::*;
 use label::*;
 use mesh::*;
 use pipeline::*;
-use scene::*;
 use texture::*;
 
 #[derive(Debug)]
@@ -44,14 +41,11 @@ pub struct RenderState {
     pub surface: Surface,
     pub surface_config: SurfaceConfiguration,
 
-    pub camera_bind: CameraBind,
     pub bind_groups: Vec<BindGroup>,
-    pub clear_color: Color,
+    pub camera_bind: CameraBind,
     pub depth_texture_bind: TextureBind,
 
-    pub cube_const_resource: cube::ConstResource,
-    pub cube_const_resource_bind: cube::ConstResourceBind,
-    pub cube_pipeline: RenderPipeline,
+    pub cube_pipeline: cube::Pipeline,
 
     pub mesh_manager: MeshManager,
 }
@@ -128,60 +122,26 @@ impl RenderState {
         bind_group_layouts.push(lay);
         bind_groups.push(bg);
 
-        // bind group 开始 cube
-        let cube_const_resource = cube::ConstResource::init();
-        let cube_const_resource_bind = cube_const_resource.create_bind(&device, &queue)?;
-        // cube_const_resource_bind.write(&queue, &cube_const_resource);
-        let (lay, bg) = cube::build_bind_group(&device, &cube_const_resource_bind)?;
-        // bind group 结束
-        bind_group_layouts.push(lay);
-        bind_groups.push(bg);
-
-        // pipeline
-        let layout = {
-            let desc = PipelineLayoutDescriptor {
-                label: Some("Cube Pipline Layout"),
-                bind_group_layouts: &[&bind_group_layouts[0], &bind_group_layouts[1]],
-                // bind_group_layouts: &[&bind_group_layouts[0]],
-                // todo 相机vp, dt每帧更新的都换成 push_constants
-                push_constant_ranges: &[],
-            };
-            device.create_pipeline_layout(&desc)
-        };
-
-        let cube_pipeline = {
-            let mut builder = PipelineBuilder::new();
-            let (v_lay, i_lay) = {
-                let vid = &mesh_manager.cube_meshs[0].vertex_layout_id;
-                let iid = &mesh_manager.cube_meshs[0].instance_layout_id;
-                let v = mesh_manager
-                    .attr_lay_set
-                    .get(vid)
-                    .ok_or(anyhow!(EMPTY_KEY))?;
-                let i = mesh_manager
-                    .attr_lay_set
-                    .get(iid)
-                    .ok_or(anyhow!(EMPTY_KEY))?;
-                (v, i)
-            };
-            let vertex_buffer = [
-                cube::CubeVertx::desc(v_lay),
-                cube::CubeInstance::desc(i_lay),
-            ];
-            builder
-                .set_device(&device)
-                .set_label("Cube Pipline")
-                .set_layout(&layout)
-                .set_target_blend(BlendState::REPLACE)
-                .set_target_format(TextureFormat::Bgra8UnormSrgb)
-                .set_vs_path("shader/cube_shader.wgsl")
-                .set_fs_path("shader/cube_shader.wgsl")
-                .set_vertex_buffer(&vertex_buffer);
-            builder.build()?
-        };
-
         // 深度图
-        let depth_texture_bind = create_depth_texture_bind(&device, &surface_config)?;
+        let mut desc = TextureArgs::depth_texture();
+        desc.width = surface_config.width;
+        desc.height = surface_config.height;
+
+        let depth_format = desc.format;
+        let depth_texture_bind = {
+            let texture = device.create_texture(&desc.into_desc(Some("Depth Texture")));
+            let view = texture.create_view(&TextureViewDescriptor::default());
+            TextureBind { texture, view }
+        };
+
+        // cube 管线
+        let cube_pipeline = cube::PipelinePreparer::init()?.create_pipeline(
+            &device,
+            &queue,
+            &bind_group_layouts,
+            surface_config.format,
+            depth_format,
+        )?;
 
         let mut ret = Self {
             device,
@@ -191,11 +151,8 @@ impl RenderState {
             cube_pipeline,
             camera_bind,
             bind_groups,
-            clear_color,
             depth_texture_bind,
             mesh_manager,
-            cube_const_resource,
-            cube_const_resource_bind,
         };
         Ok(ret)
     }
@@ -210,53 +167,25 @@ impl RenderState {
             };
             self.device.create_command_encoder(&desc)
         };
+        let main_surface_view = texture.texture.create_view(&Default::default());
+
+        // 这里
         {
-            let main_surface_view = texture.texture.create_view(&Default::default());
-            let mut render_pass = {
-                let color_att = RenderPassColorAttachment {
-                    view: &main_surface_view,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(self.clear_color),
-                        store: true,
-                    },
-                };
-                let depth_stencil_att = RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture_bind.view,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Clear(1.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                };
-                let desc = RenderPassDescriptor {
-                    label: Some("主 Render Pass"),
-                    color_attachments: &[Some(color_att)],
-                    depth_stencil_attachment: Some(depth_stencil_att),
-                };
-                encoder.begin_render_pass(&desc)
-            };
-
-            render_pass.set_pipeline(&self.cube_pipeline);
-            render_pass.set_bind_group(0, &self.bind_groups[0], &[]);
-            render_pass.set_bind_group(1, &self.bind_groups[1], &[]);
-
-            let cube_bind = &self.mesh_manager.cube_mesh_binds[0];
-            let cube_mesh = &self.mesh_manager.cube_meshs[0];
-            render_pass.set_vertex_buffer(0, cube_bind.vertex_bind.slice(..));
-            render_pass.set_index_buffer(cube_bind.index_bind.slice(..), cube_mesh.index_format);
+            let mut rp = self.cube_pipeline.start_pass(
+                &mut encoder,
+                &main_surface_view,
+                &self.depth_texture_bind.view,
+                &self.bind_groups,
+            );
             for i in 0..self.mesh_manager.cube_mesh_binds.len() {
-                let cube_bind = &self.mesh_manager.cube_mesh_binds[i];
-                let cube_mesh = &self.mesh_manager.cube_meshs[i];
-                let index_len = cube_mesh.indices.len() as u32;
-                let mut instance_len = cube_mesh.instance.len() as u32;
-                if instance_len < 1 {
-                    instance_len = 1;
-                }
-                render_pass.set_vertex_buffer(1, cube_bind.instance_bind.slice(..));
-                render_pass.draw_indexed(0..index_len, 0, 0..instance_len);
+                let bind = &self.mesh_manager.cube_mesh_binds[i];
+                let instance_len = self.mesh_manager.cube_meshs[i].instance.len() as u32;
+                let mref = &mut rp;
+                self.cube_pipeline
+                    .draw(mref, &bind.instance_bind, instance_len);
             }
         }
+
         let command_buffer = encoder.finish();
         self.queue.submit(once(command_buffer));
         texture.present();
@@ -272,6 +201,8 @@ impl RenderState {
         Ok(())
     }
 }
+
+pub fn ttt<'a, 'b>(p: &'b cube::Pipeline, rp: &'b mut RenderPass<'a>) {}
 
 fn create_depth_texture_bind(
     device: &Device,

@@ -4,13 +4,12 @@ use std::{
     io::Read,
     iter::once,
     mem::{replace, size_of},
-    num::{NonZeroU32, NonZeroU64, NonZeroI64},
+    num::{NonZeroI64, NonZeroU32, NonZeroU64},
     rc::Rc,
 };
 
 use anyhow::Result;
 use bytemuck::cast_slice;
-use cubescript2_macros::derive_desc;
 use image::{DynamicImage, GenericImageView, ImageBuffer, Pixel, Rgba};
 use memoffset::offset_of;
 use nalgebra::{Affine3, Isometry3, Matrix4, Perspective3, Point3, Projective3, Vector3};
@@ -26,8 +25,10 @@ use crate::{
         orient::{CompressedData, Orient},
         *,
     },
+    render::texture::format_info::TextureFormatPixelInfo,
     utils::*,
 };
+use resource::*;
 
 use super::super::*;
 
@@ -161,11 +162,14 @@ impl ConstResource {
         let rot: MATRIX = Default::default();
         let mut rot_mat: [MATRIX; ORIENT_COUNT] = [rot; ORIENT_COUNT];
         for code in 0..ORIENT_COUNT as u8 {
-            let orint = Orient::<CompressedData>::decode(code<<1).uncompress();
+            let orint = Orient::<CompressedData>::decode(code << 1).uncompress();
             let mat = orint.to_matrix_without_flip();
             rot_mat[code as usize] = mat.to_homogeneous().into();
         }
-        let paths = vec!["image/cube_test.png".to_string(),"image/cube_test_2.png".to_string()];
+        let paths = vec![
+            "image/cube_test".to_string(),
+            "image/cube_test_2".to_string(),
+        ];
         Self { rot_mat, paths }
     }
     pub fn create_bind(&self, device: &Device, queue: &Queue) -> Result<ConstResourceBind> {
@@ -177,93 +181,25 @@ impl ConstResource {
         let format = TextureFormat::Rgba8UnormSrgb;
         let len = self.paths.len();
         let texture_array = {
-            let mip_len = 4;
-            let size = Extent3d {
-                width: 128,
-                height: 128,
-                depth_or_array_layers: len as u32,
+            let mut image_array = Vec::new();
+            let is_srgb = true;
+            for path in self.paths.iter() {
+                let img = ImageMipMap::from_path(path, is_srgb)?;
+                image_array.push(img);
+            }
+            let mut desc = TextureArgs::texture_array();
+            desc.format = if is_srgb {
+                TextureFormat::Rgba8UnormSrgb
+            } else {
+                TextureFormat::Rgba8Unorm
             };
-            let desc = TextureDescriptor {
-                label: Some("CubeTex"),
-                size,
-                mip_level_count: mip_len,
-                sample_count: 1u32,
-                dimension: TextureDimension::D2,
-                format: format,
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            };
-            let tx = device.create_texture(&desc);
-
+            desc.width = image_array[0].width;
+            desc.height = image_array[0].height;
+            desc.depth = len as u32;
+            desc.mip_level_count = image_array[0].mip_map_count();
+            let tx = device.create_texture(&desc.into_desc(Some("CubeTex")));
             for i in 0..len {
-                println!("{}", self.paths[i]);
-                let img = image::open(&self.paths[i])?;
-                let mut mips = vec![img.to_rgba8()];
-                for mip_i in 1..mip_len {
-                    let width = size.width >> mip_i;
-                    let height = size.height >> mip_i;
-                    let mut mip = ImageBuffer::new(width, height);
-                    for x in 0..width {
-                        for y in 0..height {
-                            let mut sum = Rgba([0u8; 4]);
-                            for dx in 0..2 {
-                                for dy in 0..2 {
-                                    let p = mips[mip_i as usize - 1].get_pixel(x * 2+dx, y * 2+dy);
-                                    for c in 0..4 {
-                                        sum.0[c] += p[c]/4;
-                                    }
-                                }
-                            }
-                            mip.put_pixel(x, y, sum);
-                        }
-                    }
-                    // todo 测试代码, 记得删掉
-                    // {
-                    //     let mut name = String::new();
-                    //     name.push_str("img_");
-                    //     name.push_str(i.to_string().as_str());
-                    //     name.push_str("_mip_");
-                    //     name.push_str(mip_i.to_string().as_str());
-                    //     name.push_str(".png");
-                    //     mip.save_with_format(name,image::ImageFormat::Png)?;
-                    // }
-                    mips.push(mip);
-                }
-
-                let mips: Vec<_> = mips.into_iter().map(|mip|{
-                    mip.into_raw()
-                }).collect();
-
-                for mip_i in 0..mip_len {
-                    let width = size.width >> mip_i;
-                    let height = size.height >> mip_i;
-                    let t = ImageCopyTexture {
-                        texture: &tx,
-                        mip_level: mip_i,
-                        origin: Origin3d {
-                            x: 0,
-                            y: 0,
-                            z: i as u32,
-                        },
-                        aspect: TextureAspect::All,
-                    };
-                    let data_lay = ImageDataLayout {
-                        offset: 0,
-                        bytes_per_row: Some(
-                            NonZeroU32::new(format.pixel_size() as u32 * width).unwrap(),
-                        ),
-                        rows_per_image: None,
-                    };
-                    queue.write_texture(
-                        t,
-                        &mips[mip_i as usize][..],
-                        data_lay,
-                        Extent3d {
-                            width,
-                            height,
-                            depth_or_array_layers: 1,
-                        },
-                    );
-                }
+                image_array[i].write_into_texture(queue, &tx, i as u32);
             }
             tx
         };
@@ -300,6 +236,33 @@ impl ConstResource {
             sampler: sampler,
         })
     }
+
+    pub fn get_layout_args() -> Result<[BindGroupLayoutEntryArgs; 3]> {
+        let rot_mat = BindGroupLayoutEntryArgs {
+            count: None,
+            visibility: ShaderStages::VERTEX,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+        };
+        let sampler = BindGroupLayoutEntryArgs {
+            count: None,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Sampler(SamplerBindingType::Filtering),
+        };
+        let texture = BindGroupLayoutEntryArgs {
+            count: None,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Texture {
+                sample_type: TextureSampleType::Float { filterable: true },
+                view_dimension: TextureViewDimension::D2Array,
+                multisampled: false,
+            },
+        };
+        Ok([rot_mat, sampler, texture])
+    }
 }
 
 #[derive(Debug)]
@@ -311,6 +274,13 @@ pub struct ConstResourceBind {
 }
 
 impl ConstResourceBind {
+    pub fn get_bind_resource(&self) -> Result<[BindingResource; 3]> {
+        Ok([
+            self.rot_mat.as_entire_binding(),
+            BindingResource::Sampler(&self.sampler),
+            BindingResource::TextureView(&self.array_view),
+        ])
+    }
     pub fn get_entries_desc<'a>(&'a self) -> [BindGroupBuilderEntryDesc<'a>; 3] {
         let rot_desc = BindGroupBuilderEntryDesc {
             resource: self.rot_mat.as_entire_binding(),
@@ -362,3 +332,198 @@ pub fn build_bind_group(
     let (layout, group) = builder.build()?;
     Ok((layout, group))
 }
+
+pub struct PipelinePreparer {
+    pub vs: Shader,
+    pub fs: Shader,
+}
+
+impl PipelinePreparer {
+    pub fn init() -> Result<Self> {
+        let vs = Shader::from_path(get_abs_path(VS_PATH)?, ShaderType::Wgsl, Shader::VS_FUNC_NAME.to_string())?;
+        let fs = Shader::from_path(get_abs_path(FS_PATH)?, ShaderType::Wgsl, Shader::FS_FUNC_NAME.to_string())?;
+        Ok(Self { vs, fs })
+    }
+
+    pub fn create_pipeline<'a, I>(
+        &'a self,
+        device: &'a Device,
+        queue: &'a Queue,
+        group_layouts: I,
+        target_format: TextureFormat,
+        depth_format: TextureFormat,
+    ) -> Result<Pipeline>
+    where
+        I: IntoIterator<Item = &'a BindGroupLayout>,
+    {
+        // 绑定组
+        let const_layout = create_bind_group_layout(
+            device,
+            Some("Cube Const Resource Group Layout"),
+            &ConstResource::get_layout_args()?,
+        )?;
+        let const_group = {
+            let const_bind = {
+                let res = ConstResource::init();
+                res.create_bind(device, queue)?
+            };
+            let binding = const_bind.get_bind_resource()?;
+            create_bind_group(device, Some("Const Group"), &const_layout, &binding)?
+        };
+
+        // 创建管线
+        let extend = [&const_layout];
+        let pipe_layout = {
+            let group_layouts = group_layouts.into_iter().map(|l| l).chain(extend);
+            create_pipeline_layout(device, Some("Cube Pipeline Layout"), group_layouts)?
+        };
+        let vs = create_shader_module(device, Some("Cube VS"), self.vs.data.as_shader_source())?;
+        let fs = create_shader_module(device, Some("Cube FS"), self.fs.data.as_shader_source())?;
+        let v = CubeVertx::attr_desc();
+        let i = CubeInstance::attr_desc();
+        let vbl = {
+            let v = CubeVertx::desc(&v);
+            let i = CubeInstance::desc(&i);
+            [v, i]
+        };
+        // 不透明的管线, 后面透明管线应该会有很多重复的参数, 再想办法
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Cube Pipeline"),
+            layout: Some(&pipe_layout),
+            vertex: VertexState {
+                module: &vs,
+                entry_point: self.vs.enter_point(),
+                buffers: &vbl,
+            },
+            fragment: Some(FragmentState {
+                module: &fs,
+                entry_point: self.fs.enter_point(),
+                targets: &[Some(ColorTargetState {
+                    format: target_format,
+                    blend: Some(BlendState::REPLACE),
+                    write_mask: ColorWrites::ALL,
+                })],
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
+                polygon_mode: PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(DepthStencilState {
+                format: depth_format,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        });
+
+        // 其他东西
+
+        // 共用的 vertex 和 index
+        let vertex = create_buffer(
+            device,
+            Some("Cube Vertex"),
+            BufferUsages::VERTEX,
+            TEST_VERTICES,
+        );
+        let index = create_buffer(
+            device,
+            Some("Cube Index"),
+            BufferUsages::INDEX,
+            TEST_INDICES,
+        );
+
+        Ok(Pipeline {
+            pipeline,
+            groups: vec![const_group],
+            vertex,
+            index,
+            index_len: TEST_INDICES.len() as u32,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct Pipeline {
+    pub pipeline: RenderPipeline,
+    pub groups: Vec<BindGroup>,
+    pub vertex: Buffer,
+    pub index: Buffer,
+    pub index_len: u32,
+}
+impl Pipeline {
+    // 一般只调用一次
+    pub fn start_pass<'a>(
+        &'a self,
+        encoder: &'a mut CommandEncoder,
+        target_view: &'a TextureView,
+        depth_view: &'a TextureView,
+        global_groups: impl IntoIterator<Item = &'a BindGroup>,
+    ) -> RenderPass<'a> {
+        // 创建管线
+        let mut render_pass = {
+            let color_att = RenderPassColorAttachment {
+                view: &target_view,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::BLACK),
+                    store: true,
+                },
+            };
+            let depth_stencil_att = RenderPassDepthStencilAttachment {
+                view: &depth_view,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            };
+            let desc = RenderPassDescriptor {
+                label: Some("Cube Opaque Render Pass"),
+                color_attachments: &[Some(color_att)],
+                depth_stencil_attachment: Some(depth_stencil_att),
+            };
+            encoder.begin_render_pass(&desc)
+        };
+
+        // 通用资源绑定
+        render_pass.set_pipeline(&self.pipeline);
+        let mut idx = 0;
+        for g in global_groups {
+            render_pass.set_bind_group(idx, g, &[]);
+            idx += 1;
+        }
+        for g in &self.groups {
+            render_pass.set_bind_group(idx, g, &[]);
+            idx += 1;
+        }
+        render_pass.set_vertex_buffer(0, self.vertex.slice(..));
+        render_pass.set_index_buffer(self.index.slice(..), IndexFormat::Uint16);
+        render_pass
+    }
+
+    // 可多次调用
+    pub fn draw<'a, 'b>(
+        &'a self,
+        render_pass: &'b mut RenderPass<'a>,
+        instance_buffer: &'a Buffer,
+        instance_len: u32,
+    ) {
+        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+        render_pass.draw_indexed(0..self.index_len, 0, 0..instance_len);
+    }
+}
+
+const VS_PATH: &'static str = "shader/cube_shader.wgsl";
+const FS_PATH: &'static str = "shader/cube_shader.wgsl";

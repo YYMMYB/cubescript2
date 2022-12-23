@@ -6,6 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+resource ={ path ="crates/resource" }
+
 nalgebra = "*"
 winit = "*"
 wgpu = "*"
@@ -21,5 +23,3 @@ memoffset = "*"
 once_cell = "*"
 env_logger = "*"
 log = "*"
-
-cubescript2_macros = { path = "crates/macros" }

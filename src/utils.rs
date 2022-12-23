@@ -1,3 +1,7 @@
+use core::time;
+use std::{time::Instant, path::{Path, PathBuf}, env};
+use anyhow::*;
+
 #[macro_export]
 macro_rules! builder_set_fn {
     ($fn_name:ident, $field:ident, $t:ty) => {
@@ -7,6 +11,8 @@ macro_rules! builder_set_fn {
         }
     };
 }
+
+
 pub use builder_set_fn;
 
 
@@ -44,3 +50,8 @@ macro_rules! vertex_buffer_layout {
 
 pub use vertex_attribute_layout;
 pub use vertex_buffer_layout;
+
+pub fn get_abs_path(path:impl AsRef<Path>) -> Result<PathBuf>{
+    Ok(path.as_ref().canonicalize()?)
+    // Ok(env::current_dir()?.join(path))
+}
