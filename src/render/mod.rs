@@ -19,7 +19,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::utils::builder_set_fn;
+use crate::{scene::Scene, utils::builder_set_fn};
 
 pub mod built_in;
 pub mod camera;
@@ -150,7 +150,7 @@ impl RenderState {
         Ok(ret)
     }
 
-    pub fn redraw(&mut self, camera: &Camera) -> anyhow::Result<()> {
+    pub fn redraw(&mut self, camera: &Camera, scene: &mut Scene) -> anyhow::Result<()> {
         self.camera_bind.write(&mut self.queue, camera);
 
         let texture = self.surface.get_current_texture()?;
@@ -169,12 +169,8 @@ impl RenderState {
                 &self.depth_texture_bind.view,
                 &self.bind_groups,
             );
-            for i in 0..self.mesh_manager.cube_mesh_binds.len() {
-                let bind = &self.mesh_manager.cube_mesh_binds[i];
-                let instance_len = self.mesh_manager.cube_meshs[i].instance.len() as u32;
-                self.cube_pipeline
-                    .draw(&mut rp, &bind.instance_bind, instance_len);
-            }
+            self.cube_pipeline
+                .draw(&self.queue, &mut rp, &mut scene.cubes)?;
         }
 
         let command_buffer = encoder.finish();

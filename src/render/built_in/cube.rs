@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::File,
     hash::Hash,
     io::Read,
@@ -293,8 +294,16 @@ pub struct PipelinePreparer {
 
 impl PipelinePreparer {
     pub fn init() -> Result<Self> {
-        let vs = Shader::from_path(get_abs_path(VS_PATH)?, ShaderType::Wgsl, Shader::VS_FUNC_NAME.to_string())?;
-        let fs = Shader::from_path(get_abs_path(FS_PATH)?, ShaderType::Wgsl, Shader::FS_FUNC_NAME.to_string())?;
+        let vs = Shader::from_path(
+            get_abs_path(VS_PATH)?,
+            ShaderType::Wgsl,
+            Shader::VS_FUNC_NAME.to_string(),
+        )?;
+        let fs = Shader::from_path(
+            get_abs_path(FS_PATH)?,
+            ShaderType::Wgsl,
+            Shader::FS_FUNC_NAME.to_string(),
+        )?;
         Ok(Self { vs, fs })
     }
 
@@ -403,10 +412,12 @@ impl PipelinePreparer {
             vertex,
             index,
             index_len: TEST_INDICES.len() as u32,
+            mesh_binds: Default::default(),
         })
     }
 }
 
+pub type PipelineMeshBindKey = usize;
 #[derive(Debug)]
 pub struct Pipeline {
     pub pipeline: RenderPipeline,
@@ -414,6 +425,7 @@ pub struct Pipeline {
     pub vertex: Buffer,
     pub index: Buffer,
     pub index_len: u32,
+    pub mesh_binds: HashMap<PipelineMeshBindKey, MeshBind>,
 }
 impl Pipeline {
     // 一般只调用一次
@@ -469,14 +481,82 @@ impl Pipeline {
     // 可多次调用
     pub fn draw<'a, 'b>(
         &'a self,
+        queue: &'a Queue,
         render_pass: &'b mut RenderPass<'a>,
-        instance_buffer: &'a Buffer,
-        instance_len: u32,
-    ) {
-        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-        render_pass.draw_indexed(0..self.index_len, 0, 0..instance_len);
+        mesh: &'a mut Mesh,
+    ) -> Result<()> {
+        let bind = self
+            .mesh_binds
+            .get(&mesh.id)
+            .ok_or(anyhow!("mesh id 没有对应的 buffer"))?;
+        bind.write(queue, mesh);
+        render_pass.set_vertex_buffer(1, bind.instance_buffer.slice(..));
+        render_pass.draw_indexed(0..self.index_len, 0, 0..mesh.instance.len() as u32);
+        Ok(())
+    }
+
+    fn new_cube_mesh_key(&mut self) -> PipelineMeshBindKey {
+        1
+    }
+    pub fn new_cube_mesh(&mut self, device: &Device) -> Result<Mesh> {
+        let id = self.new_cube_mesh_key();
+        let mesh = Mesh::empty(id);
+        let bind = Mesh::create_bind(device);
+        self.mesh_binds.insert(id, bind);
+        Ok(mesh)
     }
 }
 
 const VS_PATH: &'static str = "shader/cube_shader.wgsl";
 const FS_PATH: &'static str = "shader/cube_shader.wgsl";
+
+pub struct Mesh {
+    id: PipelineMeshBindKey,
+    changed: bool,
+    pub instance: Vec<CubeInstance>,
+}
+
+impl Mesh {
+    pub const CAPABILITIES: u64 = 205;
+    pub(self) fn empty(id: PipelineMeshBindKey) -> Mesh {
+        Mesh {
+            id,
+            changed: false,
+            instance: Vec::new(),
+        }
+    }
+    pub fn add_cube(&mut self, pos: Vector3<f32>) {
+        for ins in TEST_INSTANCES {
+            let mut ins = ins.clone();
+            ins.position = (Vector3::from(ins.position) + pos).into();
+            self.instance.push(ins);
+        }
+        self.changed = true;
+    }
+
+    pub fn create_bind(device: &Device) -> MeshBind {
+        let instance_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Mesh Instance Buffer"),
+            size: size_of::<CubeInstance>() as u64 * Self::CAPABILITIES * TEST_INSTANCES.len() as u64,
+            usage: BufferUsages::COPY_DST | BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
+        MeshBind { instance_buffer }
+    }
+}
+
+#[derive(Debug)]
+pub struct MeshBind {
+    instance_buffer: Buffer,
+}
+
+impl MeshBind {
+    // todo 这里 data 不应该mut? 可以在最后统一设置 changed.
+    pub fn write(&self, queue: &Queue, data: &mut Mesh) {
+        if !data.changed {
+            return;
+        }
+        queue.write_buffer(&self.instance_buffer, 0, cast_slice(&data.instance[..]));
+        data.changed = true;
+    }
+}

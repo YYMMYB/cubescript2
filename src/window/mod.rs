@@ -11,7 +11,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::render::{camera::Camera, RenderState};
+use crate::{render::{camera::Camera, RenderState}, scene::Scene};
 
 pub mod input;
 use input::*;
@@ -26,6 +26,7 @@ pub async fn run() -> Result<()> {
     let mut input_action = InputAction::default();
     let mut camera = create_camera(&window);
     let mut render = RenderState::init(&window, &camera).await?;
+    let mut scene = Scene::init(&mut render)?;
     let size = window.inner_size();
     render.resize(&mut camera, size.width, size.height)?;
 
@@ -103,7 +104,7 @@ pub async fn run() -> Result<()> {
                     window.request_redraw();
                 }
                 Event::RedrawRequested(wid) => {
-                    render.redraw(&camera);
+                    render.redraw(&camera, &mut scene);
                 }
                 Event::RedrawEventsCleared => {}
                 _ => {}

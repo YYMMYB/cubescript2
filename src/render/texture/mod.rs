@@ -18,7 +18,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
-use crate::{ utils::builder_set_fn};
+use crate::utils::builder_set_fn;
 use resource::*;
 
 use self::format_info::TextureFormatPixelInfo;
@@ -33,31 +33,7 @@ pub struct TextureBind {
     pub view: TextureView,
 }
 
-impl TextureBind {
-    pub fn write(&self, queue: &Queue, image: &Image) -> Result<()> {
-        let data = &image.data;
-        let size = Extent3d {
-            width: image.width,
-            height: image.height,
-            depth_or_array_layers: 1,
-        };
-        let pixel_size = image.format.pixel_size();
-        let data_layout = ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(
-                NonZeroU32::new(pixel_size as u32 * size.width).ok_or(anyhow!("需要非0数字"))?,
-            ),
-            rows_per_image: Some(NonZeroU32::new(size.height).ok_or(anyhow!("需要非0数字"))?),
-        };
-        let texture = ImageCopyTexture {
-            texture: &self.texture,
-            mip_level: 0,
-            origin: Origin3d::ZERO,
-            aspect: TextureAspect::All,
-        };
-        Ok(queue.write_texture(texture, &data[..], data_layout, size))
-    }
-}
+impl TextureBind {}
 
 pub struct TextureArgs {
     pub width: u32,
